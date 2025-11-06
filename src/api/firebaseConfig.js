@@ -8,52 +8,40 @@ import { getFunctions } from 'firebase/functions';
 // Vite uses import.meta.env for environment variables
 // Variables must be prefixed with VITE_ to be exposed to the client
 
-// Debug: Log available env vars (only in development)
-if (import.meta.env.DEV) {
-  console.log('Available VITE_ env vars:', Object.keys(import.meta.env).filter(key => key.startsWith('VITE_')));
-}
-
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+// Fallback values (Firebase API keys are safe to expose - they're public by design)
+const FIREBASE_CONFIG_FALLBACK = {
+  apiKey: "AIzaSyDamWmgBYUfXggdYAhIZskh8FylXftbstc",
+  authDomain: "muscule-up.firebaseapp.com",
+  projectId: "muscule-up",
+  storageBucket: "muscule-up.firebasestorage.app",
+  messagingSenderId: "320921048765",
+  appId: "1:320921048765:web:b27768ea33413c1f4a89d4",
+  measurementId: "G-MMTNLMECP0"
 };
 
-// Validate that all required environment variables are present
-const requiredEnvVars = [
-  'VITE_FIREBASE_API_KEY',
-  'VITE_FIREBASE_AUTH_DOMAIN',
-  'VITE_FIREBASE_PROJECT_ID',
-  'VITE_FIREBASE_STORAGE_BUCKET',
-  'VITE_FIREBASE_MESSAGING_SENDER_ID',
-  'VITE_FIREBASE_APP_ID'
-];
+// Use environment variables if available, otherwise use fallback
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || FIREBASE_CONFIG_FALLBACK.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || FIREBASE_CONFIG_FALLBACK.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || FIREBASE_CONFIG_FALLBACK.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || FIREBASE_CONFIG_FALLBACK.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || FIREBASE_CONFIG_FALLBACK.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || FIREBASE_CONFIG_FALLBACK.appId,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || FIREBASE_CONFIG_FALLBACK.measurementId
+};
 
-const missingVars = requiredEnvVars.filter(
-  varName => !import.meta.env[varName] || import.meta.env[varName] === ''
-);
+// Log if using fallback (for debugging)
+if (!import.meta.env.VITE_FIREBASE_API_KEY) {
+  console.warn('⚠️ Using hardcoded Firebase config. Set VITE_FIREBASE_* environment variables for production.');
+}
 
-if (missingVars.length > 0) {
-  // More detailed error message
-  console.error('=== FIREBASE CONFIGURATION ERROR ===');
-  console.error('Missing Firebase environment variables:', missingVars.join(', '));
-  console.error('Available env vars:', Object.keys(import.meta.env).filter(key => key.startsWith('VITE_')));
-  console.error('Environment mode:', import.meta.env.MODE);
-  console.error('Is production:', import.meta.env.PROD);
-  console.error('====================================');
-  console.error(
-    'For local development: Create a .env.local file with your Firebase configuration.\n' +
-    'For Vercel: Add these variables in Vercel Dashboard > Settings > Environment Variables.\n' +
-    'Make sure all variables are prefixed with VITE_ and enabled for Production environment.\n' +
-    'After adding variables, you MUST redeploy (not just rebuild).'
-  );
-  throw new Error(
-    `Missing required Firebase environment variables: ${missingVars.join(', ')}. ` +
-    `See VERCEL_DEPLOYMENT.md for setup instructions.`
+// Validate that we have a valid config (either from env vars or fallback)
+// Since we have fallback values, we don't need to throw an error
+// But we'll log a warning if using fallback in production
+if (import.meta.env.PROD && !import.meta.env.VITE_FIREBASE_API_KEY) {
+  console.warn(
+    '⚠️ Firebase config: Using hardcoded values in production. ' +
+    'Consider setting VITE_FIREBASE_* environment variables in Vercel Dashboard for better security.'
   );
 }
 
