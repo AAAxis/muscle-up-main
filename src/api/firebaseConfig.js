@@ -37,10 +37,13 @@ if (missingVars.length > 0) {
     missingVars.join(', ')
   );
   console.error(
-    'Please create a .env.local file with your Firebase configuration.'
+    'For local development: Create a .env.local file with your Firebase configuration.\n' +
+    'For Vercel: Add these variables in Vercel Dashboard > Settings > Environment Variables.\n' +
+    'Make sure all variables are prefixed with VITE_ and enabled for Production environment.'
   );
   throw new Error(
-    `Missing required Firebase environment variables: ${missingVars.join(', ')}`
+    `Missing required Firebase environment variables: ${missingVars.join(', ')}. ` +
+    `See VERCEL_DEPLOYMENT.md for setup instructions.`
   );
 }
 
