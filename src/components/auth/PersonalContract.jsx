@@ -57,7 +57,26 @@ export default function PersonalContract({ user, onContractSigned }) {
                 // Initialize checkedItems based on the length of commitments from fetched data
                 setCheckedItems(new Array(results[0].commitments.length).fill(false));
             } else {
-                setError("תוכן החוזה לא נמצא. אנא פנה לתמיכה.");
+                // Create default contract if it doesn't exist
+                console.warn("No default contract found, creating default contract...");
+                const defaultContract = {
+                    key: 'default',
+                    title: 'חוזה אישי - MUSCLE UP YAVNE',
+                    instructions: 'אנא קרא/י בעיון את החוזה הבא וחתום/י עליו',
+                    intro_paragraph: '[MALE]אני מתחייב[FEMALE]אני מתחייבת[/MALE] למלא את כל הסעיפים הבאים:',
+                    commitment_header: 'התחייבויות:',
+                    commitments: [
+                        '[MALE]אבצע[FEMALE]אבצע[/MALE] את כל האימונים שנקבעו לי',
+                        '[MALE]אשמור[FEMALE]אשמור[/MALE] על תזונה נכונה ומאוזנת',
+                        '[MALE]אדווח[FEMALE]אדווח[/MALE] על התקדמותי באופן קבוע',
+                        '[MALE]אשתף[FEMALE]אשתף[/MALE] פעולה עם המאמן שלי'
+                    ],
+                    success_paragraph: 'הצלחה היא מסע, לא יעד. יחד נגיע למטרות שלך!',
+                    partnership_paragraph: 'אנחנו כאן כדי לתמוך בך בכל שלב. בואו נעבוד יחד להשגת המטרות שלך!'
+                };
+                const createdContract = await ContractContent.create(defaultContract);
+                setContractData(createdContract);
+                setCheckedItems(new Array(createdContract.commitments.length).fill(false));
             }
         } catch (err) {
             console.error("Error loading contract content:", err);

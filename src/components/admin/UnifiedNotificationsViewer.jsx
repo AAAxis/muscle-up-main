@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { User, WeeklyCheckin, NotificationResponse, GeneratedReport, EventParticipation, GroupEvent, UserGroup } from '@/api/entities';
+import { User, WeeklyCheckin, NotificationResponse, GeneratedReport, EventParticipation, GroupEvent, UserGroup, CoachNotification } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +52,7 @@ export default function UnifiedNotificationsViewer() {
   const [notificationStatuses, setNotificationStatuses] = useState([]);
   const [eventParticipations, setEventParticipations] = useState([]);
   const [groupEvents, setGroupEvents] = useState([]);
+  const [boosterRequests, setBoosterRequests] = useState([]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [activityFilter, setActivityFilter] = useState('all');
@@ -72,6 +73,7 @@ export default function UnifiedNotificationsViewer() {
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
   const [isLoadingCheckins, setIsLoadingCheckins] = useState(false);
   const [isLoadingResponses, setIsLoadingResponses] = useState(false);
+  const [isLoadingBoosterRequests, setIsLoadingBoosterRequests] = useState(false);
 
   // New states for lazy loading and caching
   const [loadedTabs, setLoadedTabs] = useState(new Set());
@@ -194,6 +196,28 @@ export default function UnifiedNotificationsViewer() {
     }
   }, [isCacheValid]);
 
+  const loadBoosterRequests = useCallback(async () => {
+    if (isCacheValid('boosterRequests')) {
+      console.log('Using cached booster requests');
+      return;
+    }
+
+    setIsLoadingBoosterRequests(true);
+    try {
+      const requests = await withRetry(() => CoachNotification.filter({ 
+        notification_type: 'booster_request',
+        is_read: false 
+      }, '-created_date', 100), 2, 2000);
+      setBoosterRequests(requests || []);
+      setLastLoadTime(prev => ({ ...prev, boosterRequests: Date.now() }));
+    } catch (error) {
+      console.error('Error loading booster requests:', error);
+      setBoosterRequests([]);
+    } finally {
+      setIsLoadingBoosterRequests(false);
+    }
+  }, [isCacheValid]);
+
   const loadEventResponses = useCallback(async () => {
     if (isCacheValid('events')) {
       console.log('Using cached event responses');
@@ -278,12 +302,15 @@ export default function UnifiedNotificationsViewer() {
       case 'events':
         await loadEventResponses();
         break;
+      case 'booster':
+        await loadBoosterRequests();
+        break;
       default:
         break;
     }
 
     setLoadedTabs(prev => new Set([...prev, tabName]));
-  }, [loadedTabs, isCacheValid, loadNotificationStatuses, loadWeeklyCheckins, loadTraineeResponses, loadEventResponses]);
+  }, [loadedTabs, isCacheValid, loadNotificationStatuses, loadWeeklyCheckins, loadTraineeResponses, loadEventResponses, loadBoosterRequests]);
 
   // Handle tab change with lazy loading
   const handleTabChange = useCallback(async (newTab) => {
@@ -657,7 +684,17 @@ export default function UnifiedNotificationsViewer() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 h-auto">
+          <TabsTrigger value="booster" className="text-xs sm:text-sm py-2">
+            <Bell className="w-4 h-4 mr-1 text-orange-600" />
+            בקשות בוסטר
+            {boosterRequests.length > 0 && (
+              <Badge className="ml-1 bg-orange-500 text-white">{boosterRequests.length}</Badge>
+            )}
+            {isCacheValid('boosterRequests') && (
+              <div className="w-2 h-2 bg-green-500 rounded-full ml-1" title="נתונים עדכניים" />
+            )}
+          </TabsTrigger>
           <TabsTrigger value="events" className="text-xs sm:text-sm py-2">
             <Calendar className="w-4 h-4 mr-1 text-red-600" />
             אירועים
@@ -856,6 +893,90 @@ export default function UnifiedNotificationsViewer() {
                         </motion.div>
                       ))}
                     </AnimatePresence>
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* 'booster' tab content */}
+        <TabsContent value="booster" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="w-5 h-5 text-orange-600" />
+                בקשות להצטרפות לתכנית הבוסטר ({boosterRequests.length})
+              </CardTitle>
+              <CardDescription>
+                בקשות מתאמנים להצטרף לתכנית הבוסטר
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingBoosterRequests ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-orange-600 ml-2" />
+                  <span className="text-slate-600">טוען בקשות בוסטר...</span>
+                </div>
+              ) : boosterRequests.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  <Bell className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>אין בקשות פתוחות להצטרפות לתכנית הבוסטר.</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[400px]">
+                  <div className="space-y-3">
+                    {boosterRequests.map((request) => (
+                      <Card key={request.id} className="border-l-4 border-l-orange-500">
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="font-semibold text-slate-800 text-lg">
+                                  {request.notification_title}
+                                </h3>
+                                <Badge className="bg-orange-100 text-orange-800">חדש</Badge>
+                              </div>
+                              <p className="text-sm text-slate-600 mb-2">
+                                <strong>מתאמן/ת:</strong> {request.user_name || request.user_email}
+                              </p>
+                              <p className="text-sm text-slate-600 mb-2">
+                                {request.notification_message}
+                              </p>
+                              {request.notification_details && (
+                                <div className="mt-3 p-3 bg-slate-50 rounded-lg text-sm">
+                                  <p><strong>אימייל:</strong> {request.notification_details.user_email}</p>
+                                  {request.notification_details.coach_name && (
+                                    <p><strong>מאמן:</strong> {request.notification_details.coach_name}</p>
+                                  )}
+                                  <p className="text-xs text-slate-500 mt-2">
+                                    תאריך בקשה: {formatDateTime(request.created_date)}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                  try {
+                                    await CoachNotification.update(request.id, { is_read: true });
+                                    setBoosterRequests(prev => prev.filter(r => r.id !== request.id));
+                                    setLastLoadTime(prev => ({ ...prev, boosterRequests: Date.now() - CACHE_DURATION }));
+                                  } catch (error) {
+                                    console.error('Error marking request as read:', error);
+                                    alert('שגיאה בסימון הבקשה כנקראה');
+                                  }
+                                }}
+                              >
+                                סמן כנקרא
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 </ScrollArea>
               )}

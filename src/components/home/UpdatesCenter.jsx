@@ -71,7 +71,7 @@ export default function UpdatesCenter() {
         const cacheKey = `notifications_${user.email}`;
         if (!forceRefresh) {
             const cachedData = apiCache.get(cacheKey);
-            if (cachedData) {
+            if (cachedData && Array.isArray(cachedData.notifications) && Array.isArray(cachedData.participations)) {
                 setAllNotifications(cachedData.notifications);
                 // When loading from cache, ensure participations map is recreated correctly
                 setEventParticipations(new Map(cachedData.participations)); // Recreate Map from array
@@ -91,7 +91,7 @@ export default function UpdatesCenter() {
                 WeightReminder.filter({ user_email: user.email, is_dismissed: false }, '-created_date'),
                 AdminMessage.list('-sent_date'), // Get all admin messages
                 user.group_names?.length > 0 ? GroupMessage.filter({ group_name: { $in: user.group_names } }, '-sent_date') : Promise.resolve([]),
-                user.group_names?.length > 0 ? GroupEvent.list('-start_datetime') : Promise.resolve()
+                user.group_names?.length > 0 ? GroupEvent.list('-start_datetime') : Promise.resolve([])
             ];
 
             const results = await Promise.allSettled(dataSources);
@@ -107,7 +107,9 @@ export default function UpdatesCenter() {
             ] = results;
 
             // Process participations first as other notifications might depend on it
-            const participationsData = participationsResult.status === 'fulfilled' ? participationsResult.value : [];
+            const participationsData = (participationsResult.status === 'fulfilled' && Array.isArray(participationsResult.value)) 
+                ? participationsResult.value 
+                : [];
             const participationsMap = new Map(participationsData.map(p => [p.event_id, p]));
             setEventParticipations(participationsMap); // Update state here
 
@@ -115,7 +117,7 @@ export default function UpdatesCenter() {
             const notificationIds = new Set(); // To prevent duplicates
 
             // Process Coach Messages - with dismiss functionality
-            if (coachMessagesResult.status === 'fulfilled') {
+            if (coachMessagesResult.status === 'fulfilled' && Array.isArray(coachMessagesResult.value)) {
                 coachMessagesResult.value.forEach(msg => {
                     const id = `coach_${msg.id}`;
                     if (!notificationIds.has(id)) {
@@ -136,7 +138,7 @@ export default function UpdatesCenter() {
             }
 
             // Process New Workouts
-            if (newWorkoutsResult.status === 'fulfilled') {
+            if (newWorkoutsResult.status === 'fulfilled' && Array.isArray(newWorkoutsResult.value)) {
                 newWorkoutsResult.value.forEach(workout => {
                     const id = `workout_${workout.id}`;
                     if (!notificationIds.has(id)) {
@@ -150,7 +152,7 @@ export default function UpdatesCenter() {
             }
 
             // Process Weight Reminders
-            if (weightRemindersResult.status === 'fulfilled') {
+            if (weightRemindersResult.status === 'fulfilled' && Array.isArray(weightRemindersResult.value)) {
                 weightRemindersResult.value.forEach(reminder => {
                     const id = `weight_${reminder.id}`;
                     if (!notificationIds.has(id)) {
@@ -164,7 +166,7 @@ export default function UpdatesCenter() {
             }
 
             // Process Admin Messages
-            if (adminMessagesResult.status === 'fulfilled') {
+            if (adminMessagesResult.status === 'fulfilled' && Array.isArray(adminMessagesResult.value)) {
                 adminMessagesResult.value.forEach(msg => {
                     // Check if this message is relevant for current user
                     let isRelevant = false;
@@ -196,7 +198,7 @@ export default function UpdatesCenter() {
             }
 
             // Process Group Messages
-            if (groupMessagesResult.status === 'fulfilled') {
+            if (groupMessagesResult.status === 'fulfilled' && Array.isArray(groupMessagesResult.value)) {
                 groupMessagesResult.value.forEach(msg => {
                     const hasRead = msg.read_receipts?.some(r => r.user_email === user.email && r.is_read);
                     const id = `group_${msg.id}`;
@@ -211,7 +213,7 @@ export default function UpdatesCenter() {
             }
 
             // Process Group Events - The notification stays until the event starts, status changes on response.
-            if (groupEventsResult.status === 'fulfilled') {
+            if (groupEventsResult.status === 'fulfilled' && Array.isArray(groupEventsResult.value)) {
                 const now = new Date();
                 groupEventsResult.value
                     .filter(event => user.group_names?.includes(event.group_name))
@@ -453,7 +455,7 @@ export default function UpdatesCenter() {
     };
 
     const displayedNotifications = useMemo(() => {
-        if (!allNotifications || allNotifications.length === 0) {
+        if (!Array.isArray(allNotifications) || allNotifications.length === 0) {
             return [];
         }
 

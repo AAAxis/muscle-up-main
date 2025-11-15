@@ -6,12 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Loader2, ChevronsUpDown, Check } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import NetworkErrorDisplay from '../components/errors/NetworkErrorDisplay';
 import WelcomeModal from '../components/auth/WelcomeModal';
+import { cn } from '@/lib/utils';
 
 export default function CompleteProfile() {
     const navigate = useNavigate();
@@ -22,6 +25,10 @@ export default function CompleteProfile() {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+    const [coaches, setCoaches] = useState([]);
+    const [isLoadingCoaches, setIsLoadingCoaches] = useState(false);
+    const [isCoachPickerOpen, setIsCoachPickerOpen] = useState(false);
+    const [selectedCoach, setSelectedCoach] = useState(null);
     
     const [formData, setFormData] = useState({
         name: '',
@@ -33,6 +40,22 @@ export default function CompleteProfile() {
         coach_email: '',
         coach_phone: ''
     });
+
+    useEffect(() => {
+        const loadCoaches = async () => {
+            setIsLoadingCoaches(true);
+            try {
+                const allUsers = await User.list();
+                const adminUsers = allUsers.filter(u => u.role === 'admin' && u.email && u.name);
+                setCoaches(adminUsers);
+            } catch (error) {
+                console.error('Error loading coaches:', error);
+            } finally {
+                setIsLoadingCoaches(false);
+            }
+        };
+        loadCoaches();
+    }, []);
 
     useEffect(() => {
         const loadUser = async () => {
@@ -49,15 +72,19 @@ export default function CompleteProfile() {
                     setShowWelcomeModal(true);
                     
                     // Initialize form with existing data
+                    const coachData = {
+                        coach_name: currentUser.coach_name || '',
+                        coach_email: currentUser.coach_email || '',
+                        coach_phone: currentUser.coach_phone || ''
+                    };
+                    
                     setFormData({
                         name: currentUser.name || '',
                         gender: currentUser.gender || '',
                         birth_date: currentUser.birth_date ? format(parseISO(currentUser.birth_date), 'yyyy-MM-dd') : '',
                         height: currentUser.height ? (currentUser.height * 100).toFixed(1) : '', // .toFixed(1) to allow decimals
                         initial_weight: currentUser.initial_weight?.toString() || '',
-                        coach_name: currentUser.coach_name || '',
-                        coach_email: currentUser.coach_email || '',
-                        coach_phone: currentUser.coach_phone || ''
+                        ...coachData
                     });
                 } else {
                     // If profile is complete, redirect to home or contract
@@ -82,6 +109,16 @@ export default function CompleteProfile() {
         loadUser();
     }, [navigate]);
 
+    // Set selected coach when coaches are loaded and user has coach email
+    useEffect(() => {
+        if (coaches.length > 0 && formData.coach_email && !selectedCoach) {
+            const foundCoach = coaches.find(c => c.email === formData.coach_email);
+            if (foundCoach) {
+                setSelectedCoach(foundCoach);
+            }
+        }
+    }, [coaches, formData.coach_email, selectedCoach]);
+
     const handleInputChange = (e) => {
         const { id, value } = e.target;
         setFormData(prev => ({ ...prev, [id]: value }));
@@ -95,6 +132,19 @@ export default function CompleteProfile() {
         if (success) setSuccess('');
     };
 
+    const handleCoachSelect = (coach) => {
+        setSelectedCoach(coach);
+        setFormData(prev => ({
+            ...prev,
+            coach_name: coach.name || '',
+            coach_email: coach.email || '',
+            coach_phone: coach.phone || ''
+        }));
+        setIsCoachPickerOpen(false);
+        if (error) setError('');
+        if (success) setSuccess('');
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (isSaving) return;
@@ -104,11 +154,11 @@ export default function CompleteProfile() {
         setSuccess('');
 
         // Validation
-        const requiredFields = ['name', 'gender', 'birth_date', 'height', 'initial_weight', 'coach_name', 'coach_email'];
+        const requiredFields = ['name', 'gender', 'birth_date', 'height', 'initial_weight'];
         const missingFields = requiredFields.filter(field => !formData[field]?.trim());
         
-        if (missingFields.length > 0) {
-            setError('אנא מלא את כל השדות החובה.');
+        if (missingFields.length > 0 || !selectedCoach) {
+            setError('אנא מלא את כל השדות החובה כולל בחירת מאמן.');
             setIsSaving(false);
             return;
         }
@@ -279,43 +329,67 @@ export default function CompleteProfile() {
                             <div className="space-y-4">
                                 <h3 className="text-lg font-semibold text-slate-700 border-b pb-2">פרטי המאמן</h3>
                                 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="coach_name">שם המאמן <span className="text-red-500">*</span></Label>
-                                        <Input 
-                                            id="coach_name" 
-                                            type="text" 
-                                            value={formData.coach_name}
-                                            onChange={handleInputChange}
-                                            disabled={isSaving}
-                                            autoComplete="off"
-                                        />
-                                    </div>
-                                    
-                                    <div className="space-y-2">
-                                        <Label htmlFor="coach_email">אימייל המאמן <span className="text-red-500">*</span></Label>
-                                        <Input 
-                                            id="coach_email" 
-                                            type="email" 
-                                            value={formData.coach_email}
-                                            onChange={handleInputChange}
-                                            disabled={isSaving}
-                                            autoComplete="email"
-                                        />
-                                    </div>
+                                <div className="space-y-2">
+                                    <Label>בחר מאמן <span className="text-red-500">*</span></Label>
+                                    <Popover open={isCoachPickerOpen} onOpenChange={setIsCoachPickerOpen}>
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                variant="outline"
+                                                role="combobox"
+                                                aria-expanded={isCoachPickerOpen}
+                                                className="w-full justify-between"
+                                                disabled={isSaving || isLoadingCoaches}
+                                            >
+                                                <span className="truncate">
+                                                    {selectedCoach 
+                                                        ? `${selectedCoach.name} (${selectedCoach.email})`
+                                                        : isLoadingCoaches 
+                                                        ? "טוען מאמנים..." 
+                                                        : "בחר מאמן מהרשימה"}
+                                                </span>
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" dir="rtl">
+                                            <Command>
+                                                <CommandInput placeholder="חפש מאמן לפי שם או אימייל..." />
+                                                <CommandList>
+                                                    <CommandEmpty>לא נמצא מאמן.</CommandEmpty>
+                                                    <CommandGroup>
+                                                        {coaches.map((coach) => (
+                                                            <CommandItem
+                                                                key={coach.email}
+                                                                value={`${coach.name} ${coach.email}`}
+                                                                onSelect={() => handleCoachSelect(coach)}
+                                                            >
+                                                                <Check
+                                                                    className={cn(
+                                                                        "mr-2 h-4 w-4",
+                                                                        selectedCoach?.email === coach.email ? "opacity-100" : "opacity-0"
+                                                                    )}
+                                                                />
+                                                                <div className="flex flex-col">
+                                                                    <span className="font-medium">{coach.name}</span>
+                                                                    <span className="text-xs text-slate-500">{coach.email}</span>
+                                                                </div>
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
                                 </div>
                                 
-                                <div className="space-y-2">
-                                    <Label htmlFor="coach_phone">טלפון המאמן</Label>
-                                    <Input 
-                                        id="coach_phone" 
-                                        type="tel" 
-                                        value={formData.coach_phone}
-                                        onChange={handleInputChange}
-                                        disabled={isSaving}
-                                        autoComplete="tel"
-                                    />
-                                </div>
+                                {selectedCoach && (
+                                    <div className="p-3 bg-slate-50 rounded-lg space-y-1 text-sm">
+                                        <p><strong>שם:</strong> {formData.coach_name}</p>
+                                        <p><strong>אימייל:</strong> {formData.coach_email}</p>
+                                        {formData.coach_phone && (
+                                            <p><strong>טלפון:</strong> {formData.coach_phone}</p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             <Button 

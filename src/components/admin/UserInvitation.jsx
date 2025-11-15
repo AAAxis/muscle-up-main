@@ -1,21 +1,28 @@
 
 import React, { useState, useEffect } from 'react';
-import { UserGroup, Invitation } from '@/api/entities';
+import { UserGroup, Invitation, User } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
-import { Separator } from '@/components/ui/separator'; // Added import for Separator
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Loader2, ChevronsUpDown, Check } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 export default function UserInvitation() {
   const [invitations, setInvitations] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [coaches, setCoaches] = useState([]);
   const [isLoading, setIsLoading] = useState(false); // Controls button loading state
+  const [isLoadingCoaches, setIsLoadingCoaches] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isCoachPickerOpen, setIsCoachPickerOpen] = useState(false);
+  const [selectedCoach, setSelectedCoach] = useState(null);
 
   const [newInvitation, setNewInvitation] = useState({
     email: '',
@@ -23,9 +30,9 @@ export default function UserInvitation() {
     lastName: '',
     groupName: '',
     startDate: format(new Date(), 'yyyy-MM-dd'),
-    coachName: 'נדיה בלשוב', // Hardcoded as per outline
-    coachEmail: 'muscleup.up13@gmail.com', // Hardcoded as per outline
-    coachPhone: '' // New field for coach phone
+    coachName: '',
+    coachEmail: '',
+    coachPhone: ''
   });
 
   // Function to load existing invitations and groups
@@ -43,13 +50,39 @@ export default function UserInvitation() {
     }
   };
 
+  // Function to load coaches
+  const loadCoaches = async () => {
+    setIsLoadingCoaches(true);
+    try {
+      const allUsers = await User.list();
+      const adminUsers = allUsers.filter(u => u.role === 'admin' && u.email && u.name);
+      setCoaches(adminUsers);
+    } catch (error) {
+      console.error('Error loading coaches:', error);
+    } finally {
+      setIsLoadingCoaches(false);
+    }
+  };
+
   useEffect(() => {
     loadInitialData();
+    loadCoaches();
   }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setNewInvitation((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleCoachSelect = (coach) => {
+    setSelectedCoach(coach);
+    setNewInvitation(prev => ({
+      ...prev,
+      coachName: coach.name || '',
+      coachEmail: coach.email || '',
+      coachPhone: coach.phone || ''
+    }));
+    setIsCoachPickerOpen(false);
   };
 
   const handleSubmit = async (e) => {
@@ -58,8 +91,8 @@ export default function UserInvitation() {
     setSuccess('');
 
     // Validation checks
-    if (!newInvitation.email || !newInvitation.firstName || !newInvitation.lastName || !newInvitation.startDate || !newInvitation.coachName || !newInvitation.coachEmail) {
-      setError('יש למלא את כל שדות החובה.');
+    if (!newInvitation.email || !newInvitation.firstName || !newInvitation.lastName || !newInvitation.startDate || !selectedCoach) {
+      setError('יש למלא את כל שדות החובה כולל בחירת מאמן.');
       return;
     }
 
@@ -94,10 +127,11 @@ export default function UserInvitation() {
         lastName: '',
         groupName: '',
         startDate: format(new Date(), 'yyyy-MM-dd'),
-        coachName: 'נדיה בלשוב', // Retain hardcoded defaults
-        coachEmail: 'muscleup.up13@gmail.com', // Retain hardcoded defaults
+        coachName: '',
+        coachEmail: '',
         coachPhone: ''
       });
+      setSelectedCoach(null);
       loadInitialData(); // Reload invitations and groups to update list if displayed
     } catch (err) {
       console.error('Failed to create invitation:', err);
@@ -187,40 +221,67 @@ export default function UserInvitation() {
             <Separator />
             <h3 className="text-lg font-semibold text-right">פרטי המאמן</h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="coachName">שם המאמן <span className="text-red-500">*</span></Label>
-                <Input
-                  id="coachName"
-                  name="coachName"
-                  value={newInvitation.coachName}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="coachEmail">אימייל המאמן <span className="text-red-500">*</span></Label>
-                <Input
-                  type="email"
-                  id="coachEmail"
-                  name="coachEmail"
-                  value={newInvitation.coachEmail}
-                  onChange={handleInputChange}
-                  required
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>בחר מאמן <span className="text-red-500">*</span></Label>
+              <Popover open={isCoachPickerOpen} onOpenChange={setIsCoachPickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={isCoachPickerOpen}
+                    className="w-full justify-between"
+                    disabled={isLoading || isLoadingCoaches}
+                  >
+                    <span className="truncate">
+                      {selectedCoach 
+                        ? `${selectedCoach.name} (${selectedCoach.email})`
+                        : isLoadingCoaches 
+                        ? "טוען מאמנים..." 
+                        : "בחר מאמן מהרשימה"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" dir="rtl">
+                  <Command>
+                    <CommandInput placeholder="חפש מאמן לפי שם או אימייל..." />
+                    <CommandList>
+                      <CommandEmpty>לא נמצא מאמן.</CommandEmpty>
+                      <CommandGroup>
+                        {coaches.map((coach) => (
+                          <CommandItem
+                            key={coach.email}
+                            value={`${coach.name} ${coach.email}`}
+                            onSelect={() => handleCoachSelect(coach)}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedCoach?.email === coach.email ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span className="font-medium">{coach.name}</span>
+                              <span className="text-xs text-slate-500">{coach.email}</span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="coachPhone">טלפון המאמן</Label>
-              <Input
-                id="coachPhone"
-                name="coachPhone"
-                value={newInvitation.coachPhone}
-                onChange={handleInputChange}
-                placeholder="אופציונלי"
-              />
-            </div>
+            {selectedCoach && (
+              <div className="p-3 bg-slate-50 rounded-lg space-y-1 text-sm">
+                <p><strong>שם:</strong> {newInvitation.coachName}</p>
+                <p><strong>אימייל:</strong> {newInvitation.coachEmail}</p>
+                {newInvitation.coachPhone && (
+                  <p><strong>טלפון:</strong> {newInvitation.coachPhone}</p>
+                )}
+              </div>
+            )}
 
             <Button type="submit" disabled={isLoading} className="w-full">
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

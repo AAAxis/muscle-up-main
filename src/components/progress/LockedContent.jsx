@@ -3,8 +3,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Lock, Check, Mail, Loader2 } from 'lucide-react';
-import { SendEmail } from '@/api/integrations';
-import { User } from '@/api/entities';
+import { User, CoachNotification } from '@/api/entities';
 
 export default function LockedContent() {
   const [isSendingRequest, setIsSendingRequest] = useState(false);
@@ -17,6 +16,19 @@ export default function LockedContent() {
     try {
       // Get current user info
       const currentUser = await User.me();
+      
+      // Check if a request already exists
+      const existingRequests = await CoachNotification.filter({ 
+        user_email: currentUser.email,
+        notification_type: 'booster_request',
+        is_read: false
+      });
+      
+      if (existingRequests && existingRequests.length > 0) {
+        setRequestStatus("ℹ️ כבר קיימת בקשה פתוחה. המאמן יראה אותה בקרוב.");
+        setIsSendingRequest(false);
+        return;
+      }
       
       // Use coach email from user profile, or fallback to admin
       let coachEmail = currentUser.coach_email;
@@ -32,30 +44,25 @@ export default function LockedContent() {
         coachEmail = admins[0].email;
       }
       
-      const subject = `🚀 בקשה להצטרפות לתכנית הבוסטר - ${currentUser.name}`;
-      const body = `
-        <div dir="rtl" style="font-family: Arial, sans-serif; text-align: right;">
-          <h2>בקשה להצטרפות לתכנית הבוסטר</h2>
-          <p>שלום,</p>
-          <p>התקבלה בקשה להצטרפות לתכנית הבוסטר עבור המתאמן/ת:</p>
-          <ul>
-            <li><strong>שם:</strong> ${currentUser.name}</li>
-            <li><strong>אימייל:</strong> ${currentUser.email}</li>
-            <li><strong>מאמן:</strong> ${currentUser.coach_name || 'לא צוין'}</li>
-          </ul>
-          <p>בכדי להפעיל את תכנית הבוסטר, יש להיכנס ל<strong>לוח הבקרה למאמן</strong> באפליקציה, לבחור בכלי <strong>"תכנית בוסטר"</strong>, לבחור את המתאמן מהרשימה ולהפעיל עבורו את התכנית.</p>
-          <br>
-          <p>תודה,<br>מערכת MUSCLE UP YAVNE</p>
-        </div>
-      `;
-
-      await SendEmail({
-        to: coachEmail,
-        subject: subject,
-        body: body,
+      // Create notification in Firestore instead of sending email
+      await CoachNotification.create({
+        user_email: currentUser.email,
+        user_name: currentUser.name || currentUser.full_name || 'משתמש לא ידוע',
+        coach_email: coachEmail,
+        notification_type: 'booster_request',
+        notification_title: '🚀 בקשה להצטרפות לתכנית הבוסטר',
+        notification_message: `המתאמן/ת ${currentUser.name || currentUser.email} מבקש/ת להצטרף לתכנית הבוסטר.`,
+        notification_details: {
+          user_name: currentUser.name,
+          user_email: currentUser.email,
+          coach_name: currentUser.coach_name || 'לא צוין',
+          request_date: new Date().toISOString()
+        },
+        is_read: false,
+        created_date: new Date().toISOString()
       });
 
-      setRequestStatus("✅ הבקשה נשלחה בהצלחה למאמן!");
+      setRequestStatus("✅ הבקשה נשלחה בהצלחה למאמן! הוא יראה אותה בלוח הבקרה.");
     } catch (error) {
       console.error("Error sending booster request:", error);
       setRequestStatus("❌ אירעה שגיאה בשליחת הבקשה. אנא נסה שוב מאוחר יותר.");
