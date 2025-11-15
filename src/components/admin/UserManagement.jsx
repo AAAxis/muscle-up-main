@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { User, WeightEntry, WeeklyTask, Workout, WaterTracking, CalorieTracking, ProgressPicture, WeightReminder, UserGroup } from '@/api/entities';
-import { SendEmail } from '@/api/integrations';
+import { User, WeightEntry, WeeklyTask, Workout, WaterTracking, CalorieTracking, ProgressPicture, WeightReminder, UserGroup, CoachNotification } from '@/api/entities';
+// SendEmail removed - using CoachNotification instead
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -667,18 +667,20 @@ export default function UserManagement({ initialUserEmail, startInEditMode, admi
         reminder_date: new Date().toISOString(),
         days_since_last_update: daysSinceLastUpdate
       });
-      await SendEmail({
-          to: user.email,
-          subject: "תזכורת: עדכון משקל",
-          body: `
-            <div dir="rtl" style="font-family: Arial, sans-serif; text-align: right;">
-              <h2>היי ${user.name},</h2>
-              <p>המאמן/ת שלך מבקש/ת ממך לעדכן את המשקל שלך באפליקציה.</p>
-              <p>עדכון קבוע עוזר לנו לעקוב אחר ההתקדמות שלך בצורה הטובה ביותר.</p>
-              <p>תודה!</p>
-              <p>צוות MuscleUp</p>
-            </div>
-          `
+      // Create notification instead of sending email
+      await CoachNotification.create({
+        user_email: user.email,
+        user_name: user.name || user.full_name || 'משתמש לא ידוע',
+        coach_email: 'system', // System notification
+        notification_type: 'weight_reminder',
+        notification_title: 'תזכורת: עדכון משקל',
+        notification_message: 'המאמן/ת שלך מבקש/ת ממך לעדכן את המשקל שלך באפליקציה.',
+        notification_details: {
+          days_since_last_update: daysSinceLastUpdate,
+          reminder_date: new Date().toISOString()
+        },
+        is_read: false,
+        created_date: new Date().toISOString()
       });
 
       setRemindersSent(prev => ({...prev, [user.id]: true}));

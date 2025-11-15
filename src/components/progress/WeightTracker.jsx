@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { WeightEntry, User, WeeklyCheckin, WeeklyTask } from '@/api/entities';
+import { WeightEntry, User, WeeklyCheckin, WeeklyTask, CoachNotification } from '@/api/entities';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Plus, Scale, TrendingUp, TrendingDown } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { format, parseISO, differenceInWeeks } from 'date-fns';
 import { he } from 'date-fns/locale';
-import { SendEmail } from '@/api/integrations';
+// SendEmail removed - using CoachNotification instead
 import { getCurrentDateString, formatDate, getCurrentISOString } from "@/components/utils/timeUtils";
 import WeightEntryForm from './WeightEntryForm';
 import CheckinModal from './CheckinModal';
@@ -200,9 +200,25 @@ export default function WeightTracker({ user, weightEntries, onUpdateEntries }) 
               </ul>
               <p>הנתונים סונכרנו וזמינים לצפייה בפאנל הניהול.</p>
             </div>`;
-          await SendEmail({ to: user.coach_email, subject, body });
-        } catch (emailError) {
-          console.error("Failed to send email notification to coach:", emailError);
+          // Create notification instead of sending email
+          await CoachNotification.create({
+            user_email: user.email,
+            user_name: user.name || user.full_name || 'משתמש לא ידוע',
+            coach_email: user.coach_email,
+            notification_type: 'weight_update',
+            notification_title: subject,
+            notification_message: `המתאמן/ת ${user.name} עדכן/ה את המשקל: ${weightValue} ק"ג`,
+            notification_details: {
+              new_weight: weightValue,
+              date: formData.date,
+              bmi: bmi,
+              bmi_category: bmi_category
+            },
+            is_read: false,
+            created_date: new Date().toISOString()
+          });
+        } catch (notificationError) {
+          console.error("Failed to send notification to coach:", notificationError);
         }
       }
       

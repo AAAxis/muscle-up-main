@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { CalorieTracking, User, MealTemplate } from '@/api/entities';
-import { UploadFile, SendEmail, InvokeLLM } from '@/api/integrations';
+import { UploadFile, InvokeLLM } from '@/api/integrations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { PreMadeWorkout, WorkoutTemplate, User, UserGroup, ExerciseDefinition } from '@/api/entities';
-import { SendEmail, InvokeLLM } from '@/api/integrations'; // Added InvokeLLM
+import { PreMadeWorkout, WorkoutTemplate, User, UserGroup, ExerciseDefinition, CoachNotification } from '@/api/entities';
+import { InvokeLLM } from '@/api/integrations'; // Added InvokeLLM
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -282,15 +282,25 @@ const ManualWorkoutBuilder = ({ templateToLoad, onTemplateLoaded, user, users, g
 
       const targetEmails = getTargetEmails();
 
+      // Create notifications for users instead of sending emails
       for (const email of targetEmails) {
         const currentUser = users.find(u => u.email === email);
         const subject = `🏋️ אימון חדש: ${workoutData.workout_title}`;
-        const body = createWorkoutEmailBody(currentUser, workoutData);
-
-        await SendEmail({
-          to: email,
-          subject,
-          body
+        
+        await CoachNotification.create({
+          user_email: email,
+          user_name: currentUser?.name || currentUser?.full_name || 'משתמש לא ידוע',
+          coach_email: 'system', // System notification
+          notification_type: 'new_workout',
+          notification_title: subject,
+          notification_message: `נוצר אימון חדש: ${workoutData.workout_title}`,
+          notification_details: {
+            workout_title: workoutData.workout_title,
+            workout_description: workoutData.workout_description,
+            created_date: new Date().toISOString()
+          },
+          is_read: false,
+          created_date: new Date().toISOString()
         });
       }
 
@@ -1094,7 +1104,9 @@ export default function WorkoutCreator({ templateToLoad, onTemplateLoaded, user 
       }));
 
       const prompt = `
-אנתח את הטקסט הבא של אימון והתאם תרגילים מהמאגר הנתון:
+אנתח את הטקסט הבא של אימון והתאם תרגילים מהמאגר הנתון.
+
+חשוב מאוד: כל התוכן חייב להיות בעברית בלבד! כל השדות (workout_title, workout_description, warmup_description, coach_notes, notes) חייבים להיות בעברית.
 
 טקסט האימון:
 ${textWorkout}
@@ -1104,11 +1116,11 @@ ${exercisesList.map(ex => `- ${ex.name_he} (${ex.category}, ${ex.muscle_group}, 
 
 בצע התאמה חכמה של תרגילים מהטקסט לתרגילים במאגר. התאם גם אם השמות לא זהים בדיוק (למשל "דחיפות" = "Push Up", "סקוואט" = "Squat").
 
-החזר JSON עם המבנה הבא:
+החזר JSON עם המבנה הבא (כל השדות בעברית!):
 {
-  "workout_title": "כותרת מוצעת לאימון",
-  "workout_description": "תיאור קצר של האימון",
-  "warmup_description": "תיאור חימום מוצע",
+  "workout_title": "כותרת מוצעת לאימון בעברית",
+  "workout_description": "תיאור קצר של האימון בעברית",
+  "warmup_description": "תיאור חימום מוצע בעברית",
   "warmup_duration": 10,
   "parts": [
     {
@@ -1120,15 +1132,17 @@ ${exercisesList.map(ex => `- ${ex.name_he} (${ex.category}, ${ex.muscle_group}, 
           "suggested_sets": 3,
           "suggested_reps": 12,
           "suggested_weight": 0,
-          "notes": "הערות אם יש",
+          "notes": "הערות אם יש בעברית",
           "confidence": 95
         }
       ]
     }
   ],
   "unmatched_exercises": ["תרגילים שלא נמצא להם התאמה", "לדוגמה: תרגיל לא קיים"],
-  "coach_notes": "הערות כלליות מומלצות למתאמן"
+  "coach_notes": "הערות כלליות מומלצות למתאמן בעברית"
 }
+
+זכור: כל הטקסט חייב להיות בעברית! אין להשתמש באנגלית בשום שדה.
 `;
 
       const response = await InvokeLLM({
@@ -1174,15 +1188,35 @@ ${exercisesList.map(ex => `- ${ex.name_he} (${ex.category}, ${ex.muscle_group}, 
       // Process the AI response and create workout structure
       const exerciseMap = new Map(exercises.map(ex => [ex.name_he, ex]));
       
+      // Helper function to detect if text is mostly English (simple heuristic)
+      const isMostlyEnglish = (text) => {
+        if (!text || typeof text !== 'string') return false;
+        // Count Hebrew characters (Unicode range for Hebrew)
+        const hebrewChars = (text.match(/[\u0590-\u05FF]/g) || []).length;
+        // Count English letters
+        const englishChars = (text.match(/[a-zA-Z]/g) || []).length;
+        return englishChars > hebrewChars * 2; // If English chars are more than 2x Hebrew, consider it English
+      };
+      
+      // Helper to add warning for English content
+      const processText = (text, fieldName) => {
+        if (!text) return '';
+        if (isMostlyEnglish(text)) {
+          console.warn(`Warning: ${fieldName} appears to be in English:`, text);
+          // Could add automatic translation here in the future
+        }
+        return text;
+      };
+      
       const processedWorkout = {
-        workout_title: response.workout_title || textTemplateName || 'אימון חדש',
-        workout_description: response.workout_description || '',
-        warmup_description: response.warmup_description || 'חימום כללי קל',
+        workout_title: processText(response.workout_title, 'workout_title') || textTemplateName || 'אימון חדש',
+        workout_description: processText(response.workout_description, 'workout_description') || '',
+        warmup_description: processText(response.warmup_description, 'warmup_description') || 'חימום כללי קל',
         warmup_duration: response.warmup_duration || 10,
         part_1_exercises: [],
         part_2_exercises: [],
         part_3_exercises: [],
-        coach_notes: response.coach_notes || ''
+        coach_notes: processText(response.coach_notes, 'coach_notes') || ''
       };
 
       // Process each part
@@ -1191,6 +1225,11 @@ ${exercisesList.map(ex => `- ${ex.name_he} (${ex.category}, ${ex.muscle_group}, 
         const partKey = `part_${Math.min(Math.max(1, part.part_number), 3)}_exercises`;
         
         part.exercises?.forEach(exercise => {
+          // Process notes if they exist
+          if (exercise.notes) {
+            exercise.notes = processText(exercise.notes, 'exercise.notes');
+          }
+          
           const matchedExercise = exerciseMap.get(exercise.matched_exercise);
           if (matchedExercise) {
             // Ensure suggested_weight is a number or 0 if null/undefined/NaN

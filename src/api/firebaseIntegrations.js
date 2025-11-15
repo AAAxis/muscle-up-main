@@ -1,7 +1,6 @@
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
-import { httpsCallable } from 'firebase/functions';
 import { fetchAndActivate, getValue } from 'firebase/remote-config';
-import { storage, functions, remoteConfig } from './firebaseConfig';
+import { storage, remoteConfig } from './firebaseConfig';
 import { auth } from './firebaseConfig';
 
 // File Upload
@@ -52,16 +51,10 @@ export const CreateFileSignedUrl = async (filePath, expiresIn = 3600) => {
   }
 };
 
-// Send Email (requires Cloud Function)
+// Send Email - DEPRECATED: Use CoachNotification instead
 export const SendEmail = async (emailData) => {
-  try {
-    const sendEmailFunction = httpsCallable(functions, 'sendEmail');
-    const result = await sendEmailFunction(emailData);
-    return result.data;
-  } catch (error) {
-    console.error('Error sending email:', error);
-    throw error;
-  }
+  console.warn('SendEmail is deprecated. Use CoachNotification.create() instead.');
+  throw new Error('SendEmail is no longer supported. Please use CoachNotification.create() for notifications.');
 };
 
 // Get OpenRouter API key from Remote Config (with fallback to env var for development)
@@ -126,8 +119,8 @@ export const InvokeLLM = async (params) => {
         {
           role: 'system',
           content: responseJsonSchema 
-            ? 'You are a helpful assistant that returns responses in JSON format only. Always use English keys in the JSON object, even when the content is in Hebrew. Return ONLY valid JSON, no additional text before or after.'
-            : 'You are a helpful assistant.'
+            ? 'You are a helpful assistant that returns responses in JSON format only. Always use English keys in the JSON object (like "workout_title", "workout_description"). However, ALL content values must be in Hebrew if the user requests Hebrew content. Return ONLY valid JSON, no additional text before or after.'
+            : 'You are a helpful assistant. If the user writes in Hebrew, respond in Hebrew. If the user writes in English, respond in English.'
         },
         {
           role: 'user',
@@ -269,16 +262,10 @@ export const GenerateImage = async (params) => {
   }
 };
 
-// Extract Data From Uploaded File (requires Cloud Function)
+// Extract Data From Uploaded File - DEPRECATED: Cloud Function removed due to CORS issues
 export const ExtractDataFromUploadedFile = async (fileUrl, options = {}) => {
-  try {
-    const extractDataFunction = httpsCallable(functions, 'extractDataFromFile');
-    const result = await extractDataFunction({ fileUrl, ...options });
-    return result.data;
-  } catch (error) {
-    console.error('Error extracting data from file:', error);
-    throw error;
-  }
+  console.warn('ExtractDataFromUploadedFile is deprecated due to Cloud Function CORS issues.');
+  throw new Error('ExtractDataFromUploadedFile is no longer supported due to Cloud Function CORS issues.');
 };
 
 // Core integrations object (matching Base44 structure)
@@ -286,9 +273,9 @@ export const Core = {
   UploadFile,
   UploadPrivateFile,
   CreateFileSignedUrl,
-  SendEmail,
+  SendEmail, // DEPRECATED - Use CoachNotification instead
   InvokeLLM,
   GenerateImage,
-  ExtractDataFromUploadedFile
+  ExtractDataFromUploadedFile // DEPRECATED - Cloud Function removed
 };
 

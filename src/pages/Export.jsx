@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from "react";
-import { User, Workout, WeightEntry, CalorieTracking, WeeklyTask, ProgressPicture, Goal, MonthlyGoal, CoachMenu } from "@/api/entities";
-import { SendEmail } from "@/api/integrations";
+import { User, Workout, WeightEntry, CalorieTracking, WeeklyTask, ProgressPicture, Goal, MonthlyGoal, CoachMenu, CoachNotification } from "@/api/entities";
+// SendEmail removed - using CoachNotification instead
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea"; // Added Textarea import
@@ -133,9 +133,24 @@ export default function Export() {
         URL.revokeObjectURL(url);
 
         if (currentUser.coach_email) {
-            await SendEmail({ to: currentUser.coach_email, subject: emailSubject, body: htmlContent });
+            // Create notification instead of sending email
+            await CoachNotification.create({
+              user_email: currentUser.email,
+              user_name: currentUser.name || currentUser.full_name || 'משתמש לא ידוע',
+              coach_email: currentUser.coach_email,
+              notification_type: 'progress_report',
+              notification_title: emailSubject,
+              notification_message: `המתאמן/ת ${currentUser.name} שלח/ה דוח התקדמות`,
+              notification_details: {
+                report_date: new Date().toISOString(),
+                report_type: 'progress_export'
+              },
+              is_read: false,
+              created_date: new Date().toISOString()
+            });
+            
             await User.updateMyUserData({ last_report_sent_date: new Date().toISOString() });
-            alert(`הדוח הופק בהצלחה ונשלח למאמן: ${currentUser.coach_email}`);
+            alert(`הדוח הופק בהצלחה והתראה נשלחה למאמן: ${currentUser.coach_email}`);
         } else {
             alert('הדוח הופק בהצלחה! אנא הגדר כתובת מייל למאמן בפרופיל לשליחה אוטומטית.');
         }

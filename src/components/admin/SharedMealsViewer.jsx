@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { User, CalorieTracking, WaterTracking } from '@/api/entities';
+import { User, CalorieTracking, WaterTracking, CoachNotification } from '@/api/entities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { groupBy } from 'lodash';
 import { formatDateTime, getRelativeTime, formatDate, formatTime } from "@/components/utils/timeUtils";
 import { Textarea } from '@/components/ui/textarea';
-import { SendEmail } from '@/api/integrations';
+// SendEmail removed - using CoachNotification instead
 
 // Helper function to add delay between API calls
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -663,13 +663,30 @@ export default function SharedMealsViewer() {
               <p>צוות MUSCLE UP YAVNE</p>
             </div>
           `;
-          await withRetry(() => SendEmail({ to: trainee.email, subject, body })); 
-          alert('המשוב נשמר ונשלח בהצלחה!');
+          // Create notification instead of sending email
+          await CoachNotification.create({
+            user_email: trainee.email,
+            user_name: trainee.name || trainee.full_name || 'משתמש לא ידוע',
+            coach_email: 'system', // System notification
+            notification_type: 'meal_feedback',
+            notification_title: subject,
+            notification_message: `קיבלת משוב על הארוחה שלך: "${textToSave.trim()}"`,
+            notification_details: {
+              meal_type: meal.meal_type || 'לא צוין',
+              meal_description: meal.meal_description || 'אין תיאור',
+              feedback: textToSave.trim(),
+              meal_date: meal.created_date
+            },
+            is_read: false,
+            created_date: new Date().toISOString()
+          });
+          
+          alert('המשוב נשמר והתראה נשלחה בהצלחה!');
         } else {
           alert('המשוב נשמר בהצלחה, אך לא ניתן לשלוח התראה למשתמש (משתמש לא נמצא).');
         }
-      } catch (emailError) {
-        console.error("Failed to send feedback email to user:", emailError);
+      } catch (notificationError) {
+        console.error("Failed to send feedback notification to user:", notificationError);
         alert('המשוב נשמר בהצלחה, אך אירעה שגיאה בשליחת התראה למשתמש.');
       }
 
