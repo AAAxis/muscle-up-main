@@ -194,7 +194,9 @@ export default function AdminDashboard({ activeTab = 'control-center', setActive
     );
   }
 
-  if (!user || user.role !== 'admin') {
+  // Treat 'coach' and 'admin' as admin roles
+  const isAdmin = user?.role === 'admin' || user?.role === 'coach';
+  if (!user || !isAdmin) {
     return <LockedScreen message="גישה מוגבלת - נדרשות הרשאות מנהל" />;
   }
 

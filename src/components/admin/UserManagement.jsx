@@ -1134,8 +1134,8 @@ export default function UserManagement({ initialUserEmail, startInEditMode, admi
     if (!Array.isArray(validUsers)) return [];
 
     return validUsers.filter(user => {
-      // Exclude admins and the current admin user from the displayed list
-      if (user.role === 'admin' || user.email === adminUser?.email) {
+      // Exclude admins/coaches and the current admin user from the displayed list
+      if ((user.role === 'admin' || user.role === 'coach') || user.email === adminUser?.email) {
         return false;
       }
 

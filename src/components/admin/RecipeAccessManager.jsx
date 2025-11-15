@@ -72,7 +72,7 @@ export default function RecipeAccessManager() {
         User.list()
       ]);
       setRecipes(recipesData);
-      setUsers(usersData.filter(u => u.role !== 'admin'));
+      setUsers(usersData.filter(u => u.role !== 'admin' && u.role !== 'coach'));
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

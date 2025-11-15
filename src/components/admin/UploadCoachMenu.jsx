@@ -23,7 +23,7 @@ export default function UploadCoachMenu() {
     const fetchData = async () => {
         try {
             const users = await User.list();
-            setAllUsers(users.filter(u => u.role !== 'admin')); // Don't show admins
+            setAllUsers(users.filter(u => u.role !== 'admin' && u.role !== 'coach')); // Don't show admins/coaches
             
             // Load recent menus for display
             const menus = await CoachMenu.list();

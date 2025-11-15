@@ -35,13 +35,16 @@ export default function LockedContent() {
       
       if (!coachEmail) {
         // Find the admin as fallback
+        // Get both admins and coaches
         const admins = await User.filter({ role: 'admin' });
-        if (!admins || admins.length === 0) {
+        const coaches = await User.filter({ role: 'coach' });
+        const allAdmins = [...(admins || []), ...(coaches || [])];
+        if (!allAdmins || allAdmins.length === 0) {
           setRequestStatus("❌ שגיאה: לא נמצא מאמן ליצירת קשר.");
           setIsSendingRequest(false);
           return;  
         }
-        coachEmail = admins[0].email;
+        coachEmail = allAdmins[0].email;
       }
       
       // Create notification in Firestore instead of sending email

@@ -51,7 +51,7 @@ export default function WorkoutTemplatesManager() {
         UserGroup.list()
       ]);
       setTemplates(templatesData);
-      setUsers(usersData.filter(u => u.role !== 'admin'));
+      setUsers(usersData.filter(u => u.role !== 'admin' && u.role !== 'coach'));
       setGroups(groupsData.filter(g => g.status === 'Active'));
     } catch (error) {
       console.error('Error loading templates:', error);

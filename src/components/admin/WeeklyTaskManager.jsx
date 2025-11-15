@@ -568,7 +568,7 @@ export default function WeeklyTaskManager() {
             let tasksToCreate = [];
 
             for (const user of allUsers) {
-                if (user.role === 'admin') continue;
+                if (user.role === 'admin' || user.role === 'coach') continue;
 
                 const userGender = user.gender === 'female' ? 'female' : 'male';
                 const predefinedTasks = userGender === 'female' ? predefinedTasksFemale : predefinedTasksMale;

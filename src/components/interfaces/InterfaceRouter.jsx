@@ -80,7 +80,10 @@ export default function InterfaceRouter({ children, currentPageName }) {
       return null;
     }
 
-    if (user.role !== 'admin') {
+    // Treat 'coach' and 'admin' as admin roles
+    const isAdmin = user.role === 'admin' || user.role === 'coach';
+    
+    if (!isAdmin) {
       // Define what a complete profile is
       const isProfileComplete = user.name && user.gender && user.birth_date && user.height && user.initial_weight;
 
@@ -138,7 +141,9 @@ export default function InterfaceRouter({ children, currentPageName }) {
   }
 
   // Route to appropriate interface based on user role
-  if (user?.role === 'admin') {
+  // Treat 'coach' and 'admin' as admin roles
+  const isAdmin = user?.role === 'admin' || user?.role === 'coach';
+  if (isAdmin) {
     return <TrainerInterface user={user} />;
   } else if (user) {
     return (

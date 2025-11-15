@@ -38,7 +38,7 @@ export default function UserWeightUpdate() {
             setStatus('loading');
             try {
                 const allUsers = await User.list();
-                setUsers(allUsers.filter(u => u.role !== 'admin'));
+                setUsers(allUsers.filter(u => u.role !== 'admin' && u.role !== 'coach'));
                 setStatus('');
             } catch (err) {
                 setStatus('error');

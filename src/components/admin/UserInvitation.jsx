@@ -55,7 +55,7 @@ export default function UserInvitation() {
     setIsLoadingCoaches(true);
     try {
       const allUsers = await User.list();
-      const adminUsers = allUsers.filter(u => u.role === 'admin' && u.email && u.name);
+      const adminUsers = allUsers.filter(u => (u.role === 'admin' || u.role === 'coach') && u.email && u.name);
       setCoaches(adminUsers);
     } catch (error) {
       console.error('Error loading coaches:', error);

@@ -116,7 +116,7 @@ export default function ControlCenter({ onNavigateToTab }) {
         { id: 'birthday', title: 'יום הולדת שמח', content: 'מזל טוב ליום הולדתך, {userName}! מאחלים לך שנה של בריאות, כושר והגשמת מטרות!' }
     ];
 
-    const traineeUsers = useMemo(() => allUsers.filter(u => u.role !== 'admin'), [allUsers]);
+    const traineeUsers = useMemo(() => allUsers.filter(u => u.role !== 'admin' && u.role !== 'coach'), [allUsers]);
 
     // Filter groups that have at least one user with booster program
     const groupsWithBoosterUsers = useMemo(() => {
@@ -297,7 +297,7 @@ export default function ControlCenter({ onNavigateToTab }) {
 
                 const filteredGroups = groupsData.filter(group => group.name !== 'מנהלה');
                 const usersForStatsAndProgress = (usersData || []).filter(user =>
-                    user.role !== 'admin' && (!user.group_names?.includes('מנהלה'))
+                    user.role !== 'admin' && user.role !== 'coach' && (!user.group_names?.includes('מנהלה'))
                 );
                 setFilteredUsers(usersForStatsAndProgress);
 
@@ -521,7 +521,7 @@ export default function ControlCenter({ onNavigateToTab }) {
         try {
             // Fetch all users in the group, including inactive ones for comprehensive data
             const users = await User.filter({ group_names: { $in: [groupName] } });
-            const traineeUsersInGroup = users.filter(u => u.role !== 'admin'); // Filter out admins
+            const traineeUsersInGroup = users.filter(u => u.role !== 'admin' && u.role !== 'coach'); // Filter out admins/coaches
             setGroupUsers(traineeUsersInGroup); // Store all users for potential future use or display
 
             const now = new Date();
