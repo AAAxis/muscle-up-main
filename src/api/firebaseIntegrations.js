@@ -101,20 +101,41 @@ export const InvokeLLM = async (params) => {
       throw new Error('Prompt is required');
     }
 
+    console.log('InvokeLLM called with:', { hasPrompt: !!prompt, hasSchema: !!responseJsonSchema });
+
     // Get API key from Remote Config
     const apiKey = await getOpenRouterApiKey();
+    
+    if (!apiKey) {
+      throw new Error('OpenRouter API key is missing. Please configure it in Firebase Remote Config or set VITE_OPENROUTER_API_KEY environment variable.');
+    }
 
     // Prepare the request body for OpenRouter
+    let finalPrompt = prompt;
+    
+    // If JSON schema is provided, ensure the prompt explicitly requests JSON
+    if (responseJsonSchema) {
+      if (!prompt.includes('JSON') && !prompt.includes('json')) {
+        finalPrompt = `${prompt}\n\nחשוב מאוד: החזר תשובה בפורמט JSON בלבד, ללא טקסט נוסף לפני או אחרי ה-JSON. התשובה חייבת להתחיל ב-{ ולהסתיים ב-}.`;
+      }
+    }
+
     const requestBody = {
       model: options.model || 'openai/gpt-4o-mini', // Default model, can be overridden
       messages: [
         {
+          role: 'system',
+          content: responseJsonSchema 
+            ? 'You are a helpful assistant that returns responses in JSON format only. Always use English keys in the JSON object, even when the content is in Hebrew. Return ONLY valid JSON, no additional text before or after.'
+            : 'You are a helpful assistant.'
+        },
+        {
           role: 'user',
-          content: prompt
+          content: finalPrompt
         }
       ],
       temperature: options.temperature || 0.7,
-      max_tokens: options.max_tokens || 2000
+      max_tokens: options.max_tokens || 4000 // Increased for longer responses
     };
 
     // Add response format if JSON schema is provided
@@ -122,11 +143,13 @@ export const InvokeLLM = async (params) => {
       requestBody.response_format = {
         type: 'json_object'
       };
-      // Add schema instruction to prompt if JSON format is required
-      if (!prompt.includes('JSON')) {
-        requestBody.messages[0].content = `${prompt}\n\nחשוב: החזר תשובה בפורמט JSON בלבד, ללא טקסט נוסף.`;
-      }
     }
+
+    console.log('Sending request to OpenRouter:', { 
+      model: requestBody.model, 
+      hasJsonFormat: !!requestBody.response_format,
+      promptLength: finalPrompt.length 
+    });
 
     // Call OpenRouter API
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -141,30 +164,62 @@ export const InvokeLLM = async (params) => {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}. ${errorData.error?.message || ''}`);
+      const errorText = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        errorData = { error: { message: errorText } };
+      }
+      console.error('OpenRouter API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorData
+      });
+      throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}. ${errorData.error?.message || errorText}`);
     }
 
     const data = await response.json();
+    console.log('OpenRouter response received:', { 
+      hasChoices: !!data.choices,
+      choicesLength: data.choices?.length,
+      hasContent: !!data.choices?.[0]?.message?.content
+    });
     
     // Extract the content from the response
     const content = data.choices?.[0]?.message?.content;
     
     if (!content) {
-      throw new Error('No content in OpenRouter response');
+      console.error('No content in response:', data);
+      throw new Error('No content in OpenRouter response. Response structure: ' + JSON.stringify(data));
     }
+
+    console.log('Response content length:', content.length);
+    console.log('Response content preview:', content.substring(0, 200));
 
     // If JSON schema was requested, parse the JSON response
     if (responseJsonSchema) {
       try {
         // Try to extract JSON from the response (in case there's extra text)
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        const jsonString = jsonMatch ? jsonMatch[0] : content;
-        return JSON.parse(jsonString);
+        let jsonString = content.trim();
+        
+        // Remove markdown code blocks if present
+        jsonString = jsonString.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '');
+        
+        // Try to find JSON object
+        const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          jsonString = jsonMatch[0];
+        }
+        
+        const parsed = JSON.parse(jsonString);
+        console.log('Successfully parsed JSON response');
+        return parsed;
       } catch (parseError) {
         console.error('Error parsing JSON response:', parseError);
-        console.error('Response content:', content);
-        throw new Error('Failed to parse JSON response from AI');
+        console.error('Raw response content:', content);
+        console.error('Content length:', content.length);
+        throw new Error(`Failed to parse JSON response from AI: ${parseError.message}. Response preview: ${content.substring(0, 500)}`);
       }
     }
 
@@ -175,12 +230,39 @@ export const InvokeLLM = async (params) => {
   }
 };
 
-// Generate Image (requires Cloud Function)
-export const GenerateImage = async (prompt, options = {}) => {
+// Generate Image using DALL-E service (no Cloud Function needed)
+export const GenerateImage = async (params) => {
   try {
-    const generateImageFunction = httpsCallable(functions, 'generateImage');
-    const result = await generateImageFunction({ prompt, ...options });
-    return result.data;
+    // Handle both old format (prompt, options) and new format (object with prompt)
+    const prompt = typeof params === 'string' ? params : params.prompt;
+    const options = typeof params === 'string' ? {} : params;
+    
+    if (!prompt) {
+      throw new Error('Prompt is required for image generation');
+    }
+
+    // Use the DALL-E service endpoint
+    // Default to production URL, can be overridden with env variable
+    const dalleServiceUrl = import.meta.env.VITE_DALLE_SERVICE_URL || 'https://dalle.roamjet.net';
+    
+    const response = await fetch(`${dalleServiceUrl}/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt,
+        size: options.size || '1024x1024'
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`DALL-E service error: ${response.status} ${response.statusText}. ${errorData.error || errorData.details || ''}`);
+    }
+
+    const data = await response.json();
+    return data;
   } catch (error) {
     console.error('Error generating image:', error);
     throw error;

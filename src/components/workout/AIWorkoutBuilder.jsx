@@ -56,6 +56,7 @@ export default function AIWorkoutBuilder({ user }) {
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [userTemplates, setUserTemplates] = useState([]);
   const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [difficultyLevel, setDifficultyLevel] = useState('בינוני'); // New state for difficulty level
 
   useEffect(() => {
@@ -164,6 +165,7 @@ export default function AIWorkoutBuilder({ user }) {
 
     setIsGenerating(true);
     setSuccessMessage(''); // Clear previous messages
+    setErrorMessage(''); // Clear previous errors
     setGeneratedWorkout(null); // Clear previous workout
     try {
       // Fetch fresh history data for the prompt
@@ -213,18 +215,138 @@ ${userContext}
 - הכן רשימת תרגילים שתתאים למשך זמן זה
 - התאם את מספר הסטים והחזרות בהתאם
 
-החזר אימון מפורט ומותאם בפורמט JSON בלבד.
+חשוב מאוד: החזר את התשובה בפורמט JSON עם המבנה הבא בדיוק. השתמש בשמות השדות באנגלית בלבד (workout_title, exercises וכו'), גם אם התוכן בעברית.
+
+דוגמה למבנה הנדרש:
+{
+  "workout_title": "אימון חיטוב מתקדם",
+  "workout_description": "אימון ממוקד לחיטוב ושריפת קלוריות",
+  "why_this_workout": "האימון מתאים למטרת החיטוב שלך ומשלב תרגילי כוח וקרדיו",
+  "estimated_duration": 60,
+  "difficulty_level": "בינוני",
+  "exercises": [
+    {
+      "name": "סקוואט",
+      "category": "רגליים",
+      "sets": 4,
+      "reps": 15,
+      "weight_suggestion": 0,
+      "duration_seconds": 0,
+      "rest_seconds": 45,
+      "notes": "שמור על גב ישר, ירך עד מקביל לרצפה"
+    },
+    {
+      "name": "פלאנק",
+      "category": "ליבה",
+      "sets": 3,
+      "reps": 0,
+      "weight_suggestion": 0,
+      "duration_seconds": 60,
+      "rest_seconds": 30,
+      "notes": "שמור על גוף ישר, נשום עמוק"
+    }
+  ]
+}
+
+החזר רק את ה-JSON, ללא טקסט נוסף לפני או אחרי. כל המפתחות (keys) חייבים להיות באנגלית.
       `;
 
-      const workoutData = await InvokeLLM({
+      let workoutData = await InvokeLLM({
         prompt,
         response_json_schema: workoutJsonSchema
       });
 
+      console.log('Workout data received:', workoutData);
+
+      // Validate that we got a valid workout structure
+      if (!workoutData || typeof workoutData !== 'object') {
+        throw new Error('Invalid response format from AI. Expected an object.');
+      }
+
+      // Handle case where AI returns Hebrew keys (fallback transformation)
+      if (workoutData.אימון && !workoutData.workout_title) {
+        console.warn('AI returned Hebrew keys, transforming...');
+        const hebrewData = workoutData.אימון;
+        
+        // Extract exercises from various possible locations
+        let exercises = [];
+        if (hebrewData.תרגילים && Array.isArray(hebrewData.תרגילים)) {
+          exercises = hebrewData.תרגילים;
+        } else if (hebrewData.חימום?.תרגילים && Array.isArray(hebrewData.חימום.תרגילים)) {
+          exercises = [...hebrewData.חימום.תרגילים];
+        }
+        if (hebrewData.חלק_ראשון?.תרגילים && Array.isArray(hebrewData.חלק_ראשון.תרגילים)) {
+          exercises = [...exercises, ...hebrewData.חלק_ראשון.תרגילים];
+        }
+        if (hebrewData.חלק_עיקרי?.תרגילים && Array.isArray(hebrewData.חלק_עיקרי.תרגילים)) {
+          exercises = [...exercises, ...hebrewData.חלק_עיקרי.תרגילים];
+        }
+        
+        // Extract duration - handle "60 דקות" format
+        let duration = 60;
+        if (hebrewData.משך) {
+          const durationMatch = String(hebrewData.משך).match(/(\d+)/);
+          if (durationMatch) {
+            duration = parseInt(durationMatch[1]);
+          }
+        }
+        
+        workoutData = {
+          workout_title: hebrewData.כותרת || hebrewData.שם || `אימון ${userGoal || 'מותאם'}`,
+          workout_description: hebrewData.תיאור || hebrewData.מטרה || `אימון ${userGoal || 'כללי'}`,
+          why_this_workout: hebrewData.למה || hebrewData.הסבר || `אימון מותאם למטרה: ${userGoal}`,
+          estimated_duration: duration,
+          difficulty_level: hebrewData['רמת קושי'] || hebrewData.קושי || difficultyLevel,
+          exercises: exercises.map(ex => ({
+            name: ex.שם || ex.name || 'תרגיל',
+            category: ex.קטגוריה || ex.category || 'כוח',
+            sets: ex.סטים || ex.sets || 3,
+            reps: ex.חזרות || ex.reps || (ex.משך ? 0 : 12),
+            weight_suggestion: ex.משקל || ex.weight_suggestion || 0,
+            duration_seconds: ex.משך ? (typeof ex.משך === 'number' ? ex.משך : parseInt(String(ex.משך).match(/(\d+)/)?.[1] || 0) * 60) : 0,
+            rest_seconds: ex.מנוחה || ex.rest_seconds || 60,
+            notes: ex.הערות || ex.notes || ex.הוראות || ''
+          }))
+        };
+        
+        // If no exercises found, create a basic structure
+        if (workoutData.exercises.length === 0) {
+          console.warn('No exercises found in Hebrew structure, creating default exercises');
+          workoutData.exercises = [
+            {
+              name: 'סקוואט',
+              category: 'רגליים',
+              sets: 3,
+              reps: 12,
+              weight_suggestion: 0,
+              duration_seconds: 0,
+              rest_seconds: 60,
+              notes: 'תרגיל בסיסי לחיזוק רגליים'
+            }
+          ];
+        }
+        
+        console.log('Transformed workout data:', workoutData);
+      }
+
+      if (!workoutData.workout_title || !workoutData.exercises || !Array.isArray(workoutData.exercises)) {
+        console.error('Invalid workout structure:', workoutData);
+        throw new Error('AI response is missing required fields (workout_title or exercises array). Received: ' + JSON.stringify(Object.keys(workoutData)));
+      }
+
+      if (workoutData.exercises.length === 0) {
+        throw new Error('AI generated a workout with no exercises. Please try again.');
+      }
+
       setGeneratedWorkout(workoutData);
+      setSuccessMessage('האימון נוצר בהצלחה!');
     } catch (error) {
       console.error("Error generating AI workout:", error);
-      alert("שגיאה ביצירת האימון. נסה שוב מאוחר יותר.");
+      const errorMsg = error.message || "שגיאה ביצירת האימון. נסה שוב מאוחר יותר.";
+      setErrorMessage(errorMsg);
+      setGeneratedWorkout(null);
+      // Also show alert for immediate feedback
+      alert(`שגיאה: ${errorMsg}`);
     } finally {
       setIsGenerating(false);
     }
@@ -303,6 +425,23 @@ ${userContext}
           className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded text-sm"
         >
           {successMessage}
+        </motion.div>
+      )}
+      {errorMessage && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded text-sm"
+        >
+          <strong>שגיאה:</strong> {errorMessage}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setErrorMessage('')}
+            className="mr-2 h-auto p-1 text-red-700 hover:text-red-900"
+          >
+            ✕
+          </Button>
         </motion.div>
       )}
 
@@ -456,6 +595,8 @@ ${userContext}
                   <Button
                     onClick={() => {
                       setGeneratedWorkout(null);
+                      setErrorMessage('');
+                      setSuccessMessage('');
                       generateAIWorkout();
                     }}
                     variant="outline"

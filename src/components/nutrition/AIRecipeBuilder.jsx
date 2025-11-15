@@ -88,29 +88,83 @@ export default function AIRecipeBuilder() {
             4. פרט הוראות הכנה צעד אחר צעד, ממוספרות
             5. חשב ערכים תזונתיים מדויקים על בסיס המרכיבים והכמויות
 
-            החזר תשובה בפורמט JSON בלבד, ללא הסברים נוספים.
+            חשוב מאוד: החזר את התשובה בפורמט JSON עם המבנה הבא בדיוק. השתמש בשמות השדות באנגלית בלבד:
+            {
+              "name": "שם המתכון בעברית",
+              "category": "ארוחות עיקריות" או "נשנושים בריאים" וכו',
+              "ingredients": ["מרכיב 1 - כמות", "מרכיב 2 - כמות", ...],
+              "instructions": "הוראות הכנה מפורטות",
+              "prep_time": מספר_דקות,
+              "servings": מספר_מנות,
+              "calories_per_serving": מספר_קלוריות,
+              "protein_grams": מספר_גרם,
+              "carbs_grams": מספר_גרם,
+              "fat_grams": מספר_גרם,
+              "difficulty": "קל" או "בינוני" או "קשה",
+              "equipment": "ציוד נדרש",
+              "tips": "טיפים"
+            }
+
+            החזר רק את ה-JSON, ללא טקסט נוסף לפני או אחרי. כל המפתחות (keys) חייבים להיות באנגלית.
         `;
 
         try {
-            const recipeData = await InvokeLLM({
+            let recipeData = await InvokeLLM({
                 prompt,
                 response_json_schema: jsonSchema
             });
+
+            console.log('Recipe data received:', recipeData);
+
+            // Handle nested structure (e.g., {recipe: {...}})
+            if (recipeData.recipe && !recipeData.name) {
+                recipeData = recipeData.recipe;
+            }
+
+            // Handle ingredients that might be objects instead of strings
+            if (recipeData.ingredients && Array.isArray(recipeData.ingredients)) {
+                recipeData.ingredients = recipeData.ingredients.map(ing => {
+                    if (typeof ing === 'string') {
+                        return ing;
+                    } else if (ing && typeof ing === 'object') {
+                        // Handle object format like {name: "potato", amount: "200", unit: "grams"}
+                        const name = ing.name || ing.שם || '';
+                        const amount = ing.amount || ing.כמות || '';
+                        const unit = ing.unit || ing.יחידה || '';
+                        return amount && unit ? `${name} - ${amount} ${unit}` : name;
+                    }
+                    return String(ing);
+                });
+            }
+
+            // Validate required fields
+            if (!recipeData.name || !recipeData.ingredients || !Array.isArray(recipeData.ingredients)) {
+                console.error('Invalid recipe structure:', recipeData);
+                throw new Error('AI response is missing required fields. Please try again.');
+            }
+
             setGeneratedRecipe(recipeData);
             setIsLoading(false);
 
-            // Generate image
+            // Generate image (optional - don't fail if it errors)
             setIsGeneratingImage(true);
-            const imagePrompt = `A beautiful, delicious-looking plate of ${recipeData.name}. Professional food photography, high quality, studio lighting, appetizing. The dish is ${recipeData.category}.`;
-            const imageResult = await GenerateImage({ prompt: imagePrompt });
-
-            setGeneratedRecipe(prev => ({ ...prev, image_url: imageResult.url }));
+            try {
+                const imagePrompt = `A beautiful, delicious-looking plate of ${recipeData.name}. Professional food photography, high quality, studio lighting, appetizing. The dish is ${recipeData.category}.`;
+                const imageResult = await GenerateImage({ prompt: imagePrompt });
+                if (imageResult && imageResult.url) {
+                    setGeneratedRecipe(prev => ({ ...prev, image_url: imageResult.url }));
+                }
+            } catch (imageError) {
+                console.warn('Image generation failed (optional feature):', imageError);
+                // Don't show error to user - image is optional
+            } finally {
+                setIsGeneratingImage(false);
+            }
 
         } catch (err) {
-            console.error(err);
-            setError('שגיאה ביצירת המתכון. נסה שוב או שנה את הפרמטרים.');
+            console.error('Error generating recipe:', err);
+            setError(err.message || 'שגיאה ביצירת המתכון. נסה שוב או שנה את הפרמטרים.');
             setIsLoading(false);
-        } finally {
             setIsGeneratingImage(false);
         }
     };
@@ -272,9 +326,12 @@ export default function AIRecipeBuilder() {
                                     <div className="bg-white/60 rounded-lg p-4">
                                         <h4 className="font-semibold mb-3 text-green-800">🥣 מרכיבים</h4>
                                         <ul className="list-disc list-inside text-sm space-y-1">
-                                            {generatedRecipe.ingredients.map((ingredient, i) => (
-                                                <li key={i}>{ingredient}</li>
-                                            ))}
+                                            {generatedRecipe.ingredients && Array.isArray(generatedRecipe.ingredients) 
+                                                ? generatedRecipe.ingredients.map((ingredient, i) => (
+                                                    <li key={i}>{typeof ingredient === 'string' ? ingredient : JSON.stringify(ingredient)}</li>
+                                                ))
+                                                : <li>אין מרכיבים זמינים</li>
+                                            }
                                         </ul>
                                     </div>
 
