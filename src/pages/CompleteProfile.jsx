@@ -22,6 +22,7 @@ export default function CompleteProfile() {
     const [isLoading, setIsLoading] = useState(true);
     const [networkError, setNetworkError] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isNavigating, setIsNavigating] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -180,18 +181,19 @@ export default function CompleteProfile() {
             
             // Show success message briefly, then navigate
             setSuccess('הפרופיל עודכן בהצלחה!');
+            setIsNavigating(true);
             
             // Navigate after a short delay to show success message
-            // Keep isSaving true during navigation to maintain spinner
+            // Keep spinner visible during navigation
             setTimeout(() => {
                 navigate(createPageUrl('Contract'));
-                // Don't set isSaving to false here - let the component unmount handle it
-            }, 800);
+            }, 600);
             
         } catch (error) {
             console.error('Error updating profile:', error);
             setError('שגיאה בשמירת הפרופיל. אנא נסה שוב.');
             setIsSaving(false);
+            setIsNavigating(false);
         }
     };
 
@@ -398,13 +400,13 @@ export default function CompleteProfile() {
 
                             <Button 
                                 type="submit" 
-                                disabled={isSaving}
+                                disabled={isSaving || isNavigating}
                                 className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold py-3 px-6 rounded-xl text-lg shadow-lg hover:shadow-xl transition-all duration-300"
                             >
-                                {isSaving ? (
+                                {(isSaving || isNavigating) ? (
                                     <>
                                         <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                                        שומר פרטים...
+                                        {isNavigating ? 'מעבר לשלב הבא...' : 'שומר פרטים...'}
                                     </>
                                 ) : (
                                     'שמור פרטים ומעבר לשלב הבא'
