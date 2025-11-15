@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 
@@ -11,6 +11,9 @@ export default function WelcomeModal({ isOpen, onClose, user }) {
         dir="rtl"
         hideCloseButton={true}
       >
+        <DialogHeader className="sr-only">
+          <DialogTitle>ברוך הבא ל-MUSCLE UP YAVNE</DialogTitle>
+        </DialogHeader>
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
