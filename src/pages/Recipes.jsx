@@ -41,7 +41,8 @@ export default function Recipes() {
         );
     }
 
-    if (!user || (!user.nutrition_access && user.role !== 'admin')) {
+    // Recipe system is now enabled for all authenticated users
+    if (!user) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-green-50 to-lime-50 flex items-center justify-center px-4">
                 <Card className="max-w-md w-full text-center shadow-xl border-t-4 border-blue-500">
@@ -50,12 +51,12 @@ export default function Recipes() {
                             <Wrench className="w-8 h-8 text-blue-600" />
                         </div>
                         <CardTitle className="text-2xl font-bold text-slate-800">
-                            🍽️ מערכת המתכונים בשדרוג
+                            נדרשת התחברות
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <p className="text-slate-500 text-lg font-semibold">
-                            בקרוב...
+                            יש להתחבר כדי לגשת למערכת המתכונים
                         </p>
                          <div className="mt-8 text-center">
                             <button 

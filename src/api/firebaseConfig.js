@@ -3,6 +3,7 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getFunctions } from 'firebase/functions';
+import { getRemoteConfig, fetchAndActivate, getValue } from 'firebase/remote-config';
 
 // Firebase configuration from environment variables
 // Vite uses import.meta.env for environment variables
@@ -53,6 +54,13 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const functions = getFunctions(app);
+
+// Initialize Remote Config
+export const remoteConfig = getRemoteConfig(app);
+remoteConfig.settings.minimumFetchIntervalMillis = 3600000; // 1 hour
+remoteConfig.defaultConfig = {
+  openrouter_api_key: ''
+};
 
 // Configure Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();

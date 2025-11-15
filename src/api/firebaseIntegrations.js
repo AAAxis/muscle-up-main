@@ -1,6 +1,7 @@
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { httpsCallable } from 'firebase/functions';
-import { storage, functions } from './firebaseConfig';
+import { fetchAndActivate, getValue } from 'firebase/remote-config';
+import { storage, functions, remoteConfig } from './firebaseConfig';
 import { auth } from './firebaseConfig';
 
 // File Upload
@@ -63,14 +64,113 @@ export const SendEmail = async (emailData) => {
   }
 };
 
-// Invoke LLM (requires Cloud Function)
-export const InvokeLLM = async (prompt, options = {}) => {
+// Get OpenRouter API key from Remote Config (with fallback to env var for development)
+const getOpenRouterApiKey = async () => {
+  // First, try environment variable (useful for development)
+  const envApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+  if (envApiKey) {
+    return envApiKey;
+  }
+
   try {
-    const invokeLLMFunction = httpsCallable(functions, 'invokeLLM');
-    const result = await invokeLLMFunction({ prompt, ...options });
-    return result.data;
+    // Fetch and activate remote config
+    await fetchAndActivate(remoteConfig);
+    const apiKeyValue = getValue(remoteConfig, 'openrouter_api_key');
+    const apiKey = apiKeyValue.asString();
+    
+    if (!apiKey) {
+      throw new Error('OpenRouter API key not configured in Remote Config');
+    }
+    
+    return apiKey;
   } catch (error) {
-    console.error('Error invoking LLM:', error);
+    console.error('Error fetching API key from Remote Config:', error);
+    throw new Error('Failed to get OpenRouter API key. Please configure it in Firebase Remote Config or set VITE_OPENROUTER_API_KEY environment variable.');
+  }
+};
+
+// Invoke LLM using OpenRouter API (no Cloud Function needed)
+export const InvokeLLM = async (params) => {
+  try {
+    // Handle both old format (prompt, options) and new format (object with prompt)
+    const prompt = typeof params === 'string' ? params : params.prompt;
+    const options = typeof params === 'string' ? {} : params;
+    const responseJsonSchema = options.response_json_schema;
+    
+    if (!prompt) {
+      throw new Error('Prompt is required');
+    }
+
+    // Get API key from Remote Config
+    const apiKey = await getOpenRouterApiKey();
+
+    // Prepare the request body for OpenRouter
+    const requestBody = {
+      model: options.model || 'openai/gpt-4o-mini', // Default model, can be overridden
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: options.temperature || 0.7,
+      max_tokens: options.max_tokens || 2000
+    };
+
+    // Add response format if JSON schema is provided
+    if (responseJsonSchema) {
+      requestBody.response_format = {
+        type: 'json_object'
+      };
+      // Add schema instruction to prompt if JSON format is required
+      if (!prompt.includes('JSON')) {
+        requestBody.messages[0].content = `${prompt}\n\nחשוב: החזר תשובה בפורמט JSON בלבד, ללא טקסט נוסף.`;
+      }
+    }
+
+    // Call OpenRouter API
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': window.location.origin, // Optional: for analytics
+        'X-Title': 'Muscle Up App' // Optional: for analytics
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`OpenRouter API error: ${response.status} ${response.statusText}. ${errorData.error?.message || ''}`);
+    }
+
+    const data = await response.json();
+    
+    // Extract the content from the response
+    const content = data.choices?.[0]?.message?.content;
+    
+    if (!content) {
+      throw new Error('No content in OpenRouter response');
+    }
+
+    // If JSON schema was requested, parse the JSON response
+    if (responseJsonSchema) {
+      try {
+        // Try to extract JSON from the response (in case there's extra text)
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        const jsonString = jsonMatch ? jsonMatch[0] : content;
+        return JSON.parse(jsonString);
+      } catch (parseError) {
+        console.error('Error parsing JSON response:', parseError);
+        console.error('Response content:', content);
+        throw new Error('Failed to parse JSON response from AI');
+      }
+    }
+
+    return { content };
+  } catch (error) {
+    console.error('Error invoking LLM via OpenRouter:', error);
     throw error;
   }
 };
