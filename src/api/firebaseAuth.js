@@ -58,8 +58,35 @@ class FirebaseUser {
       const userDocRef = doc(db, 'users', currentUser.uid);
       const userDoc = await getDoc(userDocRef);
       
+      // If document doesn't exist but user is authenticated, create it
       if (!userDoc.exists()) {
-        throw new Error('User document not found');
+        console.warn('User document not found in Firestore, creating it...');
+        try {
+          await setDoc(userDocRef, {
+            email: currentUser.email,
+            name: currentUser.displayName || '',
+            photo_url: currentUser.photoURL || '',
+            role: 'trainee', // Default role
+            status: 'active',
+            created_at: new Date().toISOString(),
+            contract_signed: false,
+            // Add other default fields as needed
+          });
+          
+          // Fetch the newly created document
+          const newUserDoc = await getDoc(userDocRef);
+          if (newUserDoc.exists()) {
+            return {
+              id: newUserDoc.id,
+              uid: currentUser.uid,
+              email: currentUser.email,
+              ...newUserDoc.data()
+            };
+          }
+        } catch (createError) {
+          console.error('Error creating user document:', createError);
+          throw new Error('Failed to create user document');
+        }
       }
       
       return {
