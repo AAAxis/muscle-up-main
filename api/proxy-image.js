@@ -25,7 +25,15 @@ export default async function handler(req, res) {
     const backendUrl = process.env.DALLE_SERVICE_URL || 'https://dalle.roamjet.net';
     const targetUrl = `${backendUrl}/generate`;
 
-    console.log('Proxying image request to:', targetUrl);
+    // Parse request body
+    let requestBody;
+    try {
+      requestBody = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    } catch (parseError) {
+      requestBody = req.body;
+    }
+
+    console.log('Proxying image request to:', targetUrl, 'Body keys:', requestBody ? Object.keys(requestBody) : 'none');
 
     // Forward the request to the backend service
     const response = await fetch(targetUrl, {
@@ -33,7 +41,7 @@ export default async function handler(req, res) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {

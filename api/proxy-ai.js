@@ -25,7 +25,16 @@ export default async function handler(req, res) {
     const backendUrl = process.env.DALLE_SERVICE_URL || 'https://dalle.roamjet.net';
     const targetUrl = `${backendUrl}/chat`;
 
+    // Vercel automatically parses JSON body when Content-Type is application/json
+    const requestBody = req.body;
+
+    if (!requestBody) {
+      res.status(400).json({ error: 'Request body is required' });
+      return;
+    }
+
     console.log('Proxying request to:', targetUrl);
+    console.log('Request body:', JSON.stringify(requestBody).substring(0, 200));
 
     // Forward the request to the backend service
     const response = await fetch(targetUrl, {
@@ -33,11 +42,17 @@ export default async function handler(req, res) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      let errorData = {};
+      try {
+        errorData = await response.json();
+      } catch (parseError) {
+        errorData = { error: await response.text() || 'Backend service error' };
+      }
+      
       console.error('Backend service error:', response.status, errorData);
       res.status(response.status).json({
         error: errorData.error || errorData.details || 'Backend service error',
@@ -50,6 +65,7 @@ export default async function handler(req, res) {
     res.status(200).json(data);
   } catch (error) {
     console.error('Proxy error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       error: 'Internal server error',
       message: error.message,
