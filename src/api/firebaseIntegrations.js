@@ -97,7 +97,8 @@ export const InvokeLLM = async (params) => {
 
   // Check if fallback is disabled (for testing or specific use cases)
   const disableFallback = options.disableFallback || import.meta.env.VITE_DISABLE_CHAT_FALLBACK === 'true';
-  const forceBackend = options.forceBackend || import.meta.env.VITE_FORCE_CHAT_BACKEND === 'true'; // Default: try frontend first, fallback to backend
+  // Force backend by default (unless explicitly disabled)
+  const forceBackend = options.forceBackend !== false && (options.forceBackend === true || import.meta.env.VITE_FORCE_CHAT_BACKEND === 'true' || true);
 
   // If forced to use backend, skip frontend attempt
   if (forceBackend) {
@@ -281,7 +282,8 @@ export const GenerateImage = async (params) => {
 
   // Check if fallback is disabled (for testing or specific use cases)
   const disableFallback = options.disableFallback || import.meta.env.VITE_DISABLE_DALLE_FALLBACK === 'true';
-  const forceBackend = options.forceBackend || import.meta.env.VITE_FORCE_DALLE_BACKEND === 'true'; // Default: try frontend first, fallback to backend
+  // Force backend by default (unless explicitly disabled)
+  const forceBackend = options.forceBackend !== false && (options.forceBackend === true || import.meta.env.VITE_FORCE_DALLE_BACKEND === 'true' || true);
 
   // If forced to use backend, skip frontend attempt
   if (forceBackend) {
@@ -409,16 +411,23 @@ const generateImageFrontend = async (prompt, options = {}) => {
 
 // Backend DALL-E generation (fallback service)
 const generateImageBackend = async (prompt, options = {}) => {
-  // Use the DALL-E service endpoint
-  // Default to production URL, can be overridden with env variable
-  const dalleServiceUrl = import.meta.env.VITE_DALLE_SERVICE_URL || 'https://dalle.roamjet.net';
+  // Use proxy endpoint if available (for CORS), otherwise use direct backend URL
+  // Check if we're in browser and should use proxy (Vercel serverless function)
+  const useProxy = typeof window !== 'undefined';
+  const dalleServiceUrl = useProxy 
+    ? '/api/proxy-image'  // Use Vercel serverless proxy (handles CORS)
+    : (import.meta.env.VITE_DALLE_SERVICE_URL || 'https://dalle.roamjet.net');
   
   console.log('Generating image with backend DALL-E service:', { 
     serviceUrl: dalleServiceUrl,
+    useProxy,
     promptLength: prompt.length 
   });
   
-  const response = await fetch(`${dalleServiceUrl}/generate`, {
+  // Use proxy endpoint (which adds /generate internally) or direct endpoint
+  const endpoint = useProxy ? dalleServiceUrl : `${dalleServiceUrl}/generate`;
+  
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -449,12 +458,16 @@ const generateImageBackend = async (prompt, options = {}) => {
 
 // Backend chat completion (fallback service)
 const invokeLLMBackend = async (prompt, options = {}, responseJsonSchema = null) => {
-  // Use the AI service endpoint
-  // Default to production URL, can be overridden with env variable
-  const aiServiceUrl = import.meta.env.VITE_DALLE_SERVICE_URL || 'https://dalle.roamjet.net';
+  // Use proxy endpoint if available (for CORS), otherwise use direct backend URL
+  // Check if we're in browser and should use proxy (Vercel serverless function)
+  const useProxy = typeof window !== 'undefined';
+  const aiServiceUrl = useProxy 
+    ? '/api/proxy-ai'  // Use Vercel serverless proxy (handles CORS)
+    : (import.meta.env.VITE_DALLE_SERVICE_URL || 'https://dalle.roamjet.net');
   
   console.log('Generating chat completion with backend AI service:', { 
     serviceUrl: aiServiceUrl,
+    useProxy,
     promptLength: prompt.length 
   });
 
@@ -486,7 +499,10 @@ const invokeLLMBackend = async (prompt, options = {}, responseJsonSchema = null)
     };
   }
   
-  const response = await fetch(`${aiServiceUrl}/chat`, {
+  // Use proxy endpoint (which adds /chat internally) or direct endpoint
+  const endpoint = useProxy ? aiServiceUrl : `${aiServiceUrl}/chat`;
+  
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
