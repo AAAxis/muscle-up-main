@@ -143,14 +143,15 @@ export const InvokeLLM = async (params) => {
 
 // Frontend ChatGPT generation (OpenAI API directly)
 const invokeLLMFrontend = async (prompt, options = {}, responseJsonSchema = null) => {
-  // Get API key from Remote Config
-  const apiKey = await getChatGPTApiKey();
-  
-  if (!apiKey) {
-    throw new Error('ChatGPT API key is missing. Please configure it in Firebase Remote Config or set VITE_OPENAI_API_KEY environment variable.');
-  }
+  try {
+    // Get API key from Remote Config
+    const apiKey = await getChatGPTApiKey();
+    
+    if (!apiKey) {
+      throw new Error('ChatGPT API key is missing. Please configure it in Firebase Remote Config or set VITE_OPENAI_API_KEY environment variable.');
+    }
 
-  // Prepare the request body for ChatGPT
+    // Prepare the request body for ChatGPT
     let finalPrompt = prompt;
     
     // If JSON schema is provided, ensure the prompt explicitly requests JSON
