@@ -25,15 +25,25 @@ export default async function handler(req, res) {
     const backendUrl = process.env.DALLE_SERVICE_URL || 'https://dalle.roamjet.net';
     const targetUrl = `${backendUrl}/generate`;
 
-    // Parse request body
-    let requestBody;
-    try {
-      requestBody = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    } catch (parseError) {
-      requestBody = req.body;
+    // Vercel should auto-parse JSON body, but handle both cases
+    let requestBody = req.body;
+    
+    // If body is a string, parse it
+    if (typeof requestBody === 'string') {
+      try {
+        requestBody = JSON.parse(requestBody);
+      } catch (e) {
+        res.status(400).json({ error: 'Invalid JSON in request body' });
+        return;
+      }
     }
 
-    console.log('Proxying image request to:', targetUrl, 'Body keys:', requestBody ? Object.keys(requestBody) : 'none');
+    if (!requestBody) {
+      res.status(400).json({ error: 'Request body is required' });
+      return;
+    }
+
+    console.log('Proxying image to:', targetUrl);
 
     // Forward the request to the backend service
     const response = await fetch(targetUrl, {

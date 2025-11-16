@@ -21,20 +21,61 @@ export default async function handler(req, res) {
     return;
   }
 
+  // Helper function to get raw body from request stream
+  function getRawBody(req) {
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      req.on('data', chunk => chunks.push(chunk));
+      req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+      req.on('error', reject);
+    });
+  }
+
   try {
     const backendUrl = process.env.DALLE_SERVICE_URL || 'https://dalle.roamjet.net';
     const targetUrl = `${backendUrl}/chat`;
 
-    // Vercel automatically parses JSON body when Content-Type is application/json
-    const requestBody = req.body;
+    // Handle request body - Vercel may or may not auto-parse
+    let requestBody = req.body;
+    
+    // Debug logging
+    console.log('Request method:', req.method);
+    console.log('Request body type:', typeof requestBody);
+    console.log('Request body exists:', !!requestBody);
+    
+    // If body is undefined, try to get it from raw body
+    if (requestBody === undefined) {
+      try {
+        // Try reading raw body from request stream
+        const rawBody = await getRawBody(req);
+        requestBody = rawBody ? JSON.parse(rawBody) : null;
+      } catch (readError) {
+        console.error('Failed to read raw body:', readError);
+        res.status(400).json({ 
+          error: 'Could not parse request body',
+          details: readError.message 
+        });
+        return;
+      }
+    }
+    
+    // If body is a string, parse it
+    if (typeof requestBody === 'string') {
+      try {
+        requestBody = JSON.parse(requestBody);
+      } catch (e) {
+        res.status(400).json({ error: 'Invalid JSON in request body' });
+        return;
+      }
+    }
 
     if (!requestBody) {
       res.status(400).json({ error: 'Request body is required' });
       return;
     }
 
-    console.log('Proxying request to:', targetUrl);
-    console.log('Request body:', JSON.stringify(requestBody).substring(0, 200));
+    console.log('Proxying to:', targetUrl);
+    console.log('Request body keys:', Object.keys(requestBody));
 
     // Forward the request to the backend service
     const response = await fetch(targetUrl, {
