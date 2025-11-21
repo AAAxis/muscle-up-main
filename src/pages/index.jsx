@@ -28,6 +28,12 @@ import BoosterEvents from "./BoosterEvents";
 
 import Maintenance from "./Maintenance";
 
+import Marketing from "./Marketing";
+
+import PrivacyPolicy from "./PrivacyPolicy";
+
+import TermsOfService from "./TermsOfService";
+
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 const PAGES = {
@@ -59,6 +65,12 @@ const PAGES = {
     BoosterEvents: BoosterEvents,
     
     Maintenance: Maintenance,
+    
+    Marketing: Marketing,
+    
+    PrivacyPolicy: PrivacyPolicy,
+    
+    TermsOfService: TermsOfService,
     
 }
 
@@ -131,6 +143,18 @@ function PagesContent() {
                 
                 <Route path="/Maintenance" element={<Maintenance />} />
                 <Route path="/maintenance" element={<Maintenance />} />
+                
+                <Route path="/Marketing" element={<Marketing />} />
+                <Route path="/marketing" element={<Marketing />} />
+                
+                <Route path="/PrivacyPolicy" element={<PrivacyPolicy />} />
+                <Route path="/privacypolicy" element={<PrivacyPolicy />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                
+                <Route path="/TermsOfService" element={<TermsOfService />} />
+                <Route path="/termsofservice" element={<TermsOfService />} />
+                <Route path="/terms-of-service" element={<TermsOfService />} />
+                <Route path="/terms" element={<TermsOfService />} />
                 
             </Routes>
         </Layout>

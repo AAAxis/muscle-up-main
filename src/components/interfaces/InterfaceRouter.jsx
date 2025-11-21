@@ -1,12 +1,15 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useLayoutEffect } from 'react';
 import { User } from '@/api/entities';
 import TrainerInterface from './TrainerInterface';
 import TraineeInterface from './TraineeInterface';
 import NetworkErrorDisplay from '../errors/NetworkErrorDisplay';
 import LoginScreen from '../auth/LoginScreen';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+
+// Public pages that don't require authentication
+const PUBLIC_PAGES = ['Marketing', 'PrivacyPolicy', 'TermsOfService'];
 
 export default function InterfaceRouter({ children, currentPageName }) {
   const [user, setUser] = useState(null);
@@ -14,6 +17,24 @@ export default function InterfaceRouter({ children, currentPageName }) {
   const [networkError, setNetworkError] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Check if current page is public - check both currentPageName and URL pathname
+  const pathname = location.pathname.toLowerCase();
+  const isPublicPage = PUBLIC_PAGES.includes(currentPageName) || 
+    pathname.includes('marketing') || 
+    pathname.includes('privacypolicy') || 
+    pathname.includes('privacy-policy') ||
+    pathname.includes('termsofservice') || 
+    pathname.includes('terms-of-service') ||
+    pathname === '/terms';
+
+  // Immediately set loading to false for public pages (runs synchronously before paint)
+  useLayoutEffect(() => {
+    if (isPublicPage) {
+      setIsLoading(false);
+    }
+  }, [isPublicPage]);
 
   const loadUser = async () => {
     setIsLoading(true);
@@ -51,6 +72,12 @@ export default function InterfaceRouter({ children, currentPageName }) {
   };
 
   useEffect(() => {
+    // Skip auth setup for public pages
+    if (isPublicPage) {
+      setIsLoading(false);
+      return;
+    }
+
     // Set up Firebase auth state observer
     const unsubscribe = User.onAuthStateChanged(async (firebaseAuthUser) => {
       setFirebaseUser(firebaseAuthUser);
@@ -67,9 +94,14 @@ export default function InterfaceRouter({ children, currentPageName }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isPublicPage]);
 
   const memoizedUserChecks = useMemo(() => {
+    // Skip checks for public pages
+    if (isPublicPage) {
+      return null;
+    }
+
     if (isLoading || !user) {
       return null; // Do nothing until user is loaded
     }
@@ -101,7 +133,7 @@ export default function InterfaceRouter({ children, currentPageName }) {
       }
     }
     return null; // All checks passed
-  }, [user, isLoading, currentPageName]);
+  }, [user, isLoading, currentPageName, isPublicPage]);
 
 
   useEffect(() => {
@@ -116,7 +148,12 @@ export default function InterfaceRouter({ children, currentPageName }) {
     loadUser();
   };
 
-  // Show login screen if user is not authenticated
+  // Allow public pages to be accessed without authentication - check this FIRST
+  if (isPublicPage) {
+    return <>{children}</>;
+  }
+
+  // Show login screen if user is not authenticated (only for non-public pages)
   if (!firebaseUser && !isLoading) {
     return <LoginScreen />;
   }
