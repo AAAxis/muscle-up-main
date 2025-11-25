@@ -1,39 +1,51 @@
-// Vercel serverless function to send FCM notifications to specific users
-// Matches the exact pattern from admin-app
+// Vercel serverless function (for Vercel deployment)
+// Matches admin-app pattern exactly
 import admin from 'firebase-admin';
+import fs from 'fs';
 
 // Initialize Firebase Admin SDK
-if (!admin.apps.length) {
+let adminInitialized = false;
+
+async function initializeAdmin() {
+  if (adminInitialized || admin.apps.length) {
+    return;
+  }
+
   try {
     let credential;
     
     // Try to use environment variables first (production)
     if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
       credential = admin.credential.cert({
-        projectId: process.env.FIREBASE_PROJECT_ID || 'muscule-up',
+        projectId: process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'muscule-up',
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
       });
       console.log('✅ Firebase Admin SDK initialized with environment variables');
     } 
-    // Fallback to full service account JSON
-    else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-      credential = admin.credential.cert(serviceAccount);
-      console.log('✅ Firebase Admin SDK initialized with FIREBASE_SERVICE_ACCOUNT');
-    }
-    // Fallback to FCM Server Key (will use REST API)
+    // Fallback to service account file (development only - won't work on Vercel)
     else {
-      console.warn('⚠️ No Firebase Admin credentials found. Will use FCM REST API fallback.');
-      credential = null;
+      try {
+        if (fs.existsSync('./muscule-up-924cedf05ad5.json')) {
+          credential = admin.credential.cert('./muscule-up-924cedf05ad5.json');
+          console.log('✅ Firebase Admin SDK initialized with service account file');
+        } else {
+          console.warn('⚠️ No Firebase Admin credentials found. Will use FCM REST API fallback.');
+          credential = null;
+        }
+      } catch (fsError) {
+        console.warn('⚠️ Could not check for service account file:', fsError.message);
+        credential = null;
+      }
     }
 
     if (credential) {
       admin.initializeApp({
         credential,
-        projectId: process.env.FIREBASE_PROJECT_ID || 'muscule-up',
+        projectId: process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'muscule-up',
       });
       console.log('✅ Firebase Admin app initialized successfully');
+      adminInitialized = true;
     } else {
       console.log('⚠️ Firebase Admin SDK not initialized - will use FCM REST API fallback');
     }
@@ -42,7 +54,14 @@ if (!admin.apps.length) {
   }
 }
 
+// Initialize on module load
+initializeAdmin();
+
+// Vercel serverless function handler
 export default async function handler(req, res) {
+  // Ensure admin is initialized
+  await initializeAdmin();
+
   // Enable CORS for all origins
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -137,7 +156,7 @@ export default async function handler(req, res) {
     console.log('📝 Built message payload:', JSON.stringify(message, null, 2));
 
     // Try Firebase Admin SDK first, then FCM REST API as fallback
-    const FCM_SERVER_KEY = process.env.FCM_SERVER_KEY;
+    const FCM_SERVER_KEY = process.env.FCM_SERVER_KEY || process.env.NEXT_PUBLIC_FIREBASE_SERVER_KEY;
     
     let response;
     
