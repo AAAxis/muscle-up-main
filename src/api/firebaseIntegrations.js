@@ -69,30 +69,33 @@ export const SendFCMNotification = async ({ userId, userEmail, title, body, data
       throw new Error('Either userId or userEmail must be provided');
     }
 
-    // Get FCM token from Firestore (using client SDK)
+    // Get FCM tokens from Firestore (using client SDK) - similar to esim-main pattern
     const { db } = await import('./firebaseConfig');
     const { collection, query, where, getDocs, limit } = await import('firebase/firestore');
     
-    let fcmToken = null;
+    let fcmTokens = [];
     
     if (userId) {
-      // Try to get token from fcm_tokens collection
+      // Try to get tokens from fcm_tokens collection
       const tokensQuery = query(
         collection(db, 'fcm_tokens'),
         where('userId', '==', userId),
         where('active', '==', true),
-        limit(1)
+        limit(10) // Allow multiple tokens per user
       );
       const tokensSnapshot = await getDocs(tokensQuery);
       
       if (!tokensSnapshot.empty) {
-        fcmToken = tokensSnapshot.docs[0].data().token;
+        fcmTokens = tokensSnapshot.docs.map(doc => doc.data().token);
       } else {
         // Try to get from user document
         const { doc, getDoc } = await import('firebase/firestore');
         const userDoc = await getDoc(doc(db, 'users', userId));
         if (userDoc.exists()) {
-          fcmToken = userDoc.data().fcm_token;
+          const userToken = userDoc.data().fcm_token;
+          if (userToken) {
+            fcmTokens = [userToken];
+          }
         }
       }
     } else if (userEmail) {
@@ -109,29 +112,32 @@ export const SendFCMNotification = async ({ userId, userEmail, title, body, data
         const userData = userDoc.data();
         
         // Try to get token from user document
-        fcmToken = userData.fcm_token;
+        if (userData.fcm_token) {
+          fcmTokens = [userData.fcm_token];
+        }
         
-        // If not in user document, try fcm_tokens collection
-        if (!fcmToken) {
-          const tokensQuery = query(
-            collection(db, 'fcm_tokens'),
-            where('userId', '==', userDoc.id),
-            where('active', '==', true),
-            limit(1)
-          );
-          const tokensSnapshot = await getDocs(tokensQuery);
-          if (!tokensSnapshot.empty) {
-            fcmToken = tokensSnapshot.docs[0].data().token;
-          }
+        // Also try fcm_tokens collection
+        const tokensQuery = query(
+          collection(db, 'fcm_tokens'),
+          where('userId', '==', userDoc.id),
+          where('active', '==', true),
+          limit(10)
+        );
+        const tokensSnapshot = await getDocs(tokensQuery);
+        if (!tokensSnapshot.empty) {
+          fcmTokens = [...fcmTokens, ...tokensSnapshot.docs.map(doc => doc.data().token)];
         }
       }
     }
 
-    if (!fcmToken) {
+    // Remove duplicates
+    fcmTokens = [...new Set(fcmTokens)];
+
+    if (fcmTokens.length === 0) {
       throw new Error(`No FCM token found for user: ${userId || userEmail}`);
     }
 
-    // Send notification using Vercel function
+    // Send notification using Vercel function (similar to esim-main pattern)
     const apiUrl = '/api/send-notification';
     
     const response = await fetch(apiUrl, {
@@ -140,7 +146,7 @@ export const SendFCMNotification = async ({ userId, userEmail, title, body, data
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        fcmToken,
+        tokens: fcmTokens, // Send as array (like esim-main)
         title,
         body,
         data: data || {},
