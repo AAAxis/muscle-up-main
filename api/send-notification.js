@@ -1,23 +1,50 @@
 // Vercel serverless function to send FCM notifications to specific users
-// Supports both FCM_SERVER_KEY (simple) and FIREBASE_SERVICE_ACCOUNT (more powerful)
-// Option 1: Set FCM_SERVER_KEY environment variable (simpler)
-// Option 2: Set FIREBASE_SERVICE_ACCOUNT environment variable with service account JSON (more powerful)
+// Supports multiple authentication methods:
+// Option 1: FIREBASE_SERVICE_ACCOUNT (full JSON) - most powerful
+// Option 2: FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY (separate vars) - cleaner
+// Option 3: FCM_SERVER_KEY (simple REST API) - fallback
 
 let admin = null;
 let db = null;
 
-// Try to initialize Firebase Admin SDK if service account is provided
+// Try to initialize Firebase Admin SDK
 try {
+  let serviceAccount = null;
+  
+  // Method 1: Full service account JSON
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (serviceAccountJson) {
+    serviceAccount = JSON.parse(serviceAccountJson);
+    console.log('✅ Using FIREBASE_SERVICE_ACCOUNT (full JSON)');
+  }
+  // Method 2: Separate email and private key
+  else if (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+    const projectId = process.env.FIREBASE_PROJECT_ID || 'muscule-up';
+    serviceAccount = {
+      type: 'service_account',
+      project_id: projectId,
+      private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID || '',
+      private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'), // Handle escaped newlines
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      client_id: process.env.FIREBASE_CLIENT_ID || '',
+      auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+      token_uri: 'https://oauth2.googleapis.com/token',
+      auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+      client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.FIREBASE_CLIENT_EMAIL)}`,
+      universe_domain: 'googleapis.com'
+    };
+    console.log('✅ Using FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY');
+  }
+  
+  // Initialize Admin SDK if we have service account
+  if (serviceAccount) {
     admin = require('firebase-admin');
     if (!admin.apps.length) {
-      const serviceAccount = JSON.parse(serviceAccountJson);
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
       });
       db = admin.firestore();
-      console.log('✅ Firebase Admin SDK initialized with service account');
+      console.log('✅ Firebase Admin SDK initialized');
     } else {
       db = admin.firestore();
     }
