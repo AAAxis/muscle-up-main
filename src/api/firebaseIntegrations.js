@@ -58,39 +58,12 @@ export const SendEmail = async (emailData) => {
 };
 
 // Send FCM Push Notification to a specific user
+// Uses Firebase Cloud Function (callable from client-side)
 export const SendFCMNotification = async ({ userId, userEmail, title, body, data, imageUrl }) => {
   try {
-    if (!title || !body) {
-      throw new Error('Title and body are required for FCM notification');
-    }
-
-    if (!userId && !userEmail) {
-      throw new Error('Either userId or userEmail must be provided');
-    }
-
-    const apiUrl = '/api/send-notification';
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        userId,
-        userEmail,
-        title,
-        body,
-        data: data || {},
-        imageUrl,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
+    // Import and use the function from firebaseFunctions
+    const { sendFCMNotification } = await import('./firebaseFunctions');
+    const result = await sendFCMNotification({ userId, userEmail, title, body, data, imageUrl });
     console.log('✅ FCM notification sent successfully:', result);
     return result;
   } catch (error) {

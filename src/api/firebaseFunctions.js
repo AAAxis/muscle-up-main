@@ -89,3 +89,31 @@ export const exportBoosterPlusTaskTemplates = async () => {
   }
 };
 
+// Send FCM Push Notification (requires Cloud Function)
+export const sendFCMNotification = async ({ userId, userEmail, title, body, data, imageUrl }) => {
+  try {
+    if (!title || !body) {
+      throw new Error('Title and body are required for FCM notification');
+    }
+
+    if (!userId && !userEmail) {
+      throw new Error('Either userId or userEmail must be provided');
+    }
+
+    const sendNotificationFunction = httpsCallable(functions, 'sendFCMNotification');
+    const result = await sendNotificationFunction({
+      userId,
+      userEmail,
+      title,
+      body,
+      data: data || {},
+      imageUrl,
+    });
+
+    return result.data;
+  } catch (error) {
+    console.error('Error sending FCM notification:', error);
+    throw error;
+  }
+};
+
