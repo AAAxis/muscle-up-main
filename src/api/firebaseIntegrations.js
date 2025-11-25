@@ -137,7 +137,7 @@ export const SendFCMNotification = async ({ userId, userEmail, title, body, data
       throw new Error(`No FCM token found for user: ${userId || userEmail}`);
     }
 
-    // Send notification using Vercel function (similar to esim-main pattern)
+    // Send notification using Vercel function (exact pattern from admin-app)
     const apiUrl = '/api/send-notification';
     
     const response = await fetch(apiUrl, {
@@ -146,10 +146,13 @@ export const SendFCMNotification = async ({ userId, userEmail, title, body, data
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        tokens: fcmTokens, // Send as array (like esim-main)
         title,
-        body,
-        data: data || {},
+        body, // API expects 'body' field (admin-app pattern)
+        tokens: fcmTokens, // Array of FCM tokens
+        data: {
+          ...(data || {}),
+          sentFrom: 'dashboard' // Match admin-app pattern
+        },
         imageUrl,
       }),
     });
