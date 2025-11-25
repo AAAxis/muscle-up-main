@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 
 .env
+
+# Firebase service account keys (sensitive - never commit!)
+*-*.json
+*service-account*.json
+*firebase-admin*.json
+muscule-up-*.json
