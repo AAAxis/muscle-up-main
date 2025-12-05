@@ -372,7 +372,7 @@ export default function BoosterProgramManager() {
                 </div>
             )}
 
-            <Accordion type="multiple" collapsible className="w-full space-y-4">
+            <Accordion type="multiple" className="w-full space-y-4">
                 <AccordionItem value="item-1">
                     <AccordionTrigger>
                         <h3 className="text-lg font-semibold text-slate-700">ניהול תבניות משימות בוסטר</h3>
