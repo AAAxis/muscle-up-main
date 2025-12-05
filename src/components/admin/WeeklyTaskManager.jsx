@@ -1,7 +1,8 @@
 
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { WeeklyTask, User, UserGroup } from '@/api/entities';
+import { WeeklyTask, User, UserGroup, CoachNotification } from '@/api/entities';
+import { SendFCMNotification } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,7 +70,6 @@ import { he } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const TASK_RESET_CODE = "1010";
-const TASK_ADMIN_CODE = "2206";
 
 const predefinedTasksMale = [
     {
@@ -254,7 +254,6 @@ export default function WeeklyTaskManager() {
     const [selectedGroup, setSelectedGroup] = useState('');
     const [newStartDate, setNewStartDate] = useState(new Date()); // Date object for setting new booster start date
     const [resetCode, setResetCode] = useState('');
-    const [adminCode, setAdminCode] = useState(''); // Unified admin code
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
     const [feedback, setFeedback] = useState({ type: '', message: '' });
@@ -320,11 +319,6 @@ export default function WeeklyTaskManager() {
     };
 
     const handleSetStartDate = async () => {
-        if (adminCode !== TASK_ADMIN_CODE) {
-            showFeedback('error', 'קוד ניהול שגוי.');
-            return;
-        }
-
         const targetUsers = getTargetUsers();
         if (targetUsers.length === 0) {
             showFeedback('error', 'יש לבחור מתאמן או קבוצה.');
@@ -375,7 +369,6 @@ export default function WeeklyTaskManager() {
             }
 
             showFeedback('success', `תאריך התחלה חדש נקבע בהצלחה עבור ${targetUsers.length} מתאמנים.`);
-            setAdminCode('');
             await loadData();
         } catch (error) {
             console.error('Error setting start date:', error);
@@ -428,11 +421,6 @@ export default function WeeklyTaskManager() {
     };
 
     const handleTaskActivation = async (enable) => {
-        if (adminCode !== TASK_ADMIN_CODE) {
-            showFeedback('error', 'קוד ניהול שגוי.');
-            return;
-        }
-        
         const targetUsers = getTargetUsers();
         if (targetUsers.length === 0) {
             showFeedback('error', 'יש לבחור מתאמן או קבוצה.');
@@ -441,10 +429,19 @@ export default function WeeklyTaskManager() {
 
         setIsProcessing(true);
         try {
+            const currentUser = await User.me();
+            let notificationCount = 0;
+            let emailCount = 0;
+
             for (const user of targetUsers) {
                 const updatePayload = { booster_enabled: enable };
                 if (enable) {
                     updatePayload.booster_unlocked = true;
+                    updatePayload.booster_status = 'in_progress';
+                    if (!user.booster_start_date) {
+                        updatePayload.booster_start_date = new Date().toISOString();
+                    }
+                    
                     const existingTasks = await WeeklyTask.filter({ user_email: user.email });
                     if (!existingTasks || existingTasks.length === 0) {
                         // If no tasks exist, create them with current date as start
@@ -475,23 +472,109 @@ export default function WeeklyTaskManager() {
                         await WeeklyTask.bulkCreate(newTasks);
                         showFeedback('info', `נוצרה תוכנית משימות חדשה עבור ${user.name}.`);
                     }
+
+                    // Send notifications and email when enabling
+                    if (user.email) {
+                        try {
+                            // Send push notification
+                            try {
+                                await SendFCMNotification({
+                                    userId: user.id,
+                                    userEmail: user.email,
+                                    title: '🎉 גישה לתוכנית הבוסטר!',
+                                    body: `שלום ${user.name || 'מתאמן/ת'}! קיבלת גישה לתוכנית הבוסטר. התחל עכשיו את המסע שלך!`,
+                                    data: {
+                                        type: 'booster_access_granted',
+                                        userId: user.id
+                                    }
+                                });
+                                notificationCount++;
+                            } catch (fcmError) {
+                                console.warn(`Failed to send FCM notification to ${user.email}:`, fcmError);
+                            }
+
+                            // Send email notification
+                            try {
+                                const emailTitle = '🎉 גישה לתוכנית הבוסטר!';
+                                const emailMessage = `שלום ${user.name || 'מתאמן/ת'}!
+
+ברכות! קיבלת גישה לתוכנית הבוסטר שלנו.
+
+עכשיו תוכל ליהנות מכל התכונות המיוחדות של התוכנית:
+• משימות שבועיות מותאמות אישית
+• מעקב התקדמות מפורט
+• תמיכה והדרכה צמודה
+• גישה לתוכן בלעדי
+
+התחל את המסע שלך עכשיו באפליקציה!
+
+בהצלחה,
+צוות Vitrix`;
+
+                                const emailResponse = await fetch('/api/send-group-email', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify({
+                                        userEmail: user.email,
+                                        title: emailTitle,
+                                        message: emailMessage
+                                    }),
+                                });
+
+                                if (emailResponse.ok) {
+                                    emailCount++;
+                                }
+                            } catch (emailError) {
+                                console.warn(`Failed to send email to ${user.email}:`, emailError);
+                            }
+
+                            // Create CoachNotification record
+                            try {
+                                await CoachNotification.create({
+                                    user_email: user.email,
+                                    user_name: user.name || 'מתאמן/ת',
+                                    notification_type: 'booster_access_granted',
+                                    title: 'גישה לתוכנית הבוסטר',
+                                    message: 'קיבלת גישה לתוכנית הבוסטר. התחל עכשיו את המסע שלך!',
+                                    sent_by: currentUser.email || 'system',
+                                    sent_date: new Date().toISOString(),
+                                    read: false
+                                });
+                            } catch (notificationError) {
+                                console.warn(`Failed to create CoachNotification for ${user.email}:`, notificationError);
+                            }
+                        } catch (notificationError) {
+                            console.warn(`Failed to send notifications to ${user.email}:`, notificationError);
+                        }
+                    }
+                } else {
+                    // If disabling, reset status
+                    updatePayload.booster_status = 'not_started';
+                    updatePayload.booster_start_date = null;
                 }
                 await User.update(user.id, updatePayload);
             }
-            showFeedback('success', `תוכנית המשימות ${enable ? 'הופעלה' : 'כובתה'} בהצלחה.`);
+            
+            const message = `תוכנית המשימות ${enable ? 'הופעלה' : 'כובתה'} בהצלחה.`;
+            const notificationMessage = enable 
+                ? ` ${notificationCount} התראות push ו-${emailCount} אימיילים נשלחו.`
+                : '';
+            
+            showFeedback('success', message + notificationMessage);
             await loadData();
         } catch (error) {
             showFeedback('error', 'שגיאה בעדכון סטטוס המשימות.');
             console.error(error);
         } finally {
             setIsProcessing(false);
-            setAdminCode('');
         }
     };
 
     const handleAssignTasks = async () => {
-        if (!selectedUserEmailForAssignment || weeksToAssign.length === 0 || adminCode !== TASK_ADMIN_CODE) {
-            showFeedback('error', 'יש לבחור מתאמן, שבועות להקצאה ולהזין קוד ניהול תקין.');
+        if (!selectedUserEmailForAssignment || weeksToAssign.length === 0) {
+            showFeedback('error', 'יש לבחור מתאמן ושבועות להקצאה.');
             return;
         }
 
@@ -542,7 +625,6 @@ export default function WeeklyTaskManager() {
             } else {
                 showFeedback('info', 'לא נוצרו משימות, ייתכן שאין תבניות עבור השבועות שנבחרו.');
             }
-            setAdminCode('');
             await loadData();
         } catch (error) {
             console.error('Error assigning tasks:', error);
@@ -553,8 +635,8 @@ export default function WeeklyTaskManager() {
     };
 
     const handleApplyTemplateToAll = async () => {
-        if (weeksToAssign.length === 0 || adminCode !== TASK_ADMIN_CODE) {
-            showFeedback('error', 'יש לבחור שבועות להקצאה ולהזין קוד ניהול תקין.');
+        if (weeksToAssign.length === 0) {
+            showFeedback('error', 'יש לבחור שבועות להקצאה.');
             return;
         }
 
@@ -612,7 +694,6 @@ export default function WeeklyTaskManager() {
             } else {
                 showFeedback('info', 'לא נוצרו משימות, ייתכן שאין תבניות עבור השבועות שנבחרו או שאין מתאמנים פעילים.');
             }
-            setAdminCode('');
             setBulkAssignStatus('');
             await loadData();
         } catch (error) {
@@ -633,15 +714,6 @@ export default function WeeklyTaskManager() {
             });
             return;
         }
-        if (adminCode !== TASK_ADMIN_CODE) {
-            toast({
-                title: "שגיאה",
-                description: "קוד ניהול שגוי.",
-                variant: "destructive",
-            });
-            return;
-        }
-
         setIsFreezingOperation(true);
         try {
             const tasksToFreeze = tasks.filter(t => 
@@ -659,7 +731,6 @@ export default function WeeklyTaskManager() {
                 title: "הצלחה",
                 description: `כל המשימות הפעילות והעתידיות של ${userObject.name} הוקפאו בהצלחה.`,
             });
-            setAdminCode(''); // Clear global adminCode
             setSelectedUserObjectForFreeze(null); // Clear selected user
             await loadData();
         } catch (error) {
@@ -683,15 +754,6 @@ export default function WeeklyTaskManager() {
             });
             return;
         }
-        if (adminCode !== TASK_ADMIN_CODE) {
-            toast({
-                title: "שגיאה",
-                description: "קוד ניהול שגוי.",
-                variant: "destructive",
-            });
-            return;
-        }
-
         setIsUnfreezingOperation(true);
         try {
             const parsedStartDate = parseISO(startDateString);
@@ -717,7 +779,6 @@ export default function WeeklyTaskManager() {
                 title: "הצלחה",
                 description: `המשימות של ${userObject.name} הופשרו בהצלחה ותאריכיהן עודכנו החל מ-${format(parsedStartDate, 'dd/MM/yyyy')}.`,
             });
-            setAdminCode('');
             setUnfreezeStartDateInput(format(new Date(), 'yyyy-MM-dd')); // Reset date picker
             setSelectedUserObjectForUnfreeze(null); // Clear selected user
             await loadData();
@@ -992,19 +1053,10 @@ export default function WeeklyTaskManager() {
                                             </PopoverContent>
                                         </Popover>
                                     </div>
-                                    <div>
-                                        <Label>קוד ניהול</Label>
-                                        <Input
-                                            type="password"
-                                            placeholder="הכנס קוד ניהול"
-                                            value={adminCode}
-                                            onChange={(e) => setAdminCode(e.target.value)}
-                                        />
-                                    </div>
                                     <div className="flex items-end">
                                         <Button
                                             onClick={handleSetStartDate}
-                                            disabled={isProcessing || !adminCode || getTargetUsers().length === 0}
+                                            disabled={isProcessing || getTargetUsers().length === 0}
                                             className="w-full bg-green-600 hover:bg-green-700"
                                         >
                                             {isProcessing ? (
@@ -1038,7 +1090,7 @@ export default function WeeklyTaskManager() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Button
                                 onClick={() => handleTaskActivation(true)}
-                                disabled={isProcessing || !adminCode || getTargetUsers().length === 0}
+                                disabled={isProcessing || getTargetUsers().length === 0}
                                 className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
                             >
                                 <Play className="w-4 h-4" />
@@ -1047,7 +1099,7 @@ export default function WeeklyTaskManager() {
                             <Button
                                 variant="outline"
                                 onClick={() => handleTaskActivation(false)}
-                                disabled={isProcessing || !adminCode || getTargetUsers().length === 0}
+                                disabled={isProcessing || getTargetUsers().length === 0}
                                 className="border-red-300 text-red-700 hover:bg-red-50 flex items-center gap-2"
                             >
                                 <Pause className="w-4 h-4" />
@@ -1179,19 +1231,10 @@ export default function WeeklyTaskManager() {
                             </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                            <div>
-                                <Label>קוד ניהול</Label>
-                                <Input
-                                    type="password"
-                                    placeholder="הכנס קוד ניהול"
-                                    value={adminCode}
-                                    onChange={(e) => setAdminCode(e.target.value)}
-                                />
-                            </div>
                             <div className="flex items-end">
                                 <Button
                                     onClick={handleAssignTasks}
-                                    disabled={isProcessing || !adminCode || !selectedUserEmailForAssignment || weeksToAssign.length === 0}
+                                    disabled={isProcessing || !selectedUserEmailForAssignment || weeksToAssign.length === 0}
                                     className="w-full bg-indigo-600 hover:bg-indigo-700"
                                 >
                                     {isProcessing ? (
@@ -1211,7 +1254,7 @@ export default function WeeklyTaskManager() {
                         <div className="mt-4">
                             <Button
                                 onClick={handleApplyTemplateToAll}
-                                disabled={isProcessing || !adminCode || weeksToAssign.length === 0}
+                                disabled={isProcessing || weeksToAssign.length === 0}
                                 className="w-full bg-purple-600 hover:bg-purple-700 flex items-center gap-2"
                             >
                                 {isProcessing ? (
@@ -1405,19 +1448,9 @@ export default function WeeklyTaskManager() {
                                         />
                                     </div>
                                 </div>
-                                <div>
-                                    <Label>קוד ניהול</Label>
-                                    <Input
-                                        type="password"
-                                        placeholder="הכנס קוד ניהול"
-                                        value={adminCode}
-                                        onChange={(e) => setAdminCode(e.target.value)}
-                                        disabled={isUnfreezingOperation || isFreezingOperation}
-                                    />
-                                </div>
                                 <Button
                                     onClick={() => handleUnfreezeTasks(selectedUserObjectForUnfreeze, unfreezeStartDateInput)}
-                                    disabled={isUnfreezingOperation || isFreezingOperation || !selectedUserObjectForUnfreeze || !unfreezeStartDateInput || !adminCode}
+                                    disabled={isUnfreezingOperation || isFreezingOperation || !selectedUserObjectForUnfreeze || !unfreezeStartDateInput}
                                     className="w-full bg-green-600 hover:bg-green-700 flex items-center gap-2"
                                 >
                                     {isUnfreezingOperation ? (
@@ -1487,22 +1520,12 @@ export default function WeeklyTaskManager() {
                                         </PopoverContent>
                                     </Popover>
                                 </div>
-                                <div>
-                                    <Label>קוד ניהול</Label>
-                                    <Input
-                                        type="password"
-                                        placeholder="הכנס קוד ניהול"
-                                        value={adminCode}
-                                        onChange={(e) => setAdminCode(e.target.value)}
-                                        disabled={isFreezingOperation || isUnfreezingOperation}
-                                    />
-                                </div>
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
                                         <Button 
                                             variant="destructive" 
                                             className="w-full flex items-center gap-2"
-                                            disabled={isFreezingOperation || isUnfreezingOperation || !selectedUserObjectForFreeze || !adminCode}
+                                            disabled={isFreezingOperation || isUnfreezingOperation || !selectedUserObjectForFreeze}
                                         >
                                             {isFreezingOperation ? (
                                                 <>

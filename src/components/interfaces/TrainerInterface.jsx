@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from "@/components/ui/drawer";
 import { User as UserIcon, LogOut, Menu, Users, BarChart, Dumbbell, ChevronLeft, Settings, LayoutDashboard, Image } from 'lucide-react';
 import AdminDashboard from '../../pages/AdminDashboard';
 import { User } from '@/api/entities';
@@ -10,6 +11,7 @@ import TerminationFeedbackViewer from '../admin/TerminationFeedbackViewer'; // A
 
 export default function TrainerInterface({ user }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSettingsDrawerOpen, setIsSettingsDrawerOpen] = useState(false);
   const [activeAdminTab, setActiveAdminTab] = useState('user-management');
   const [navigateToTab, setNavigateToTab] = useState(null);
 
@@ -37,6 +39,12 @@ export default function TrainerInterface({ user }) {
 
   const handleLogoClick = () => {
     setIsMenuOpen(false);
+    // Open settings drawer instead of navigating
+    setIsSettingsDrawerOpen(true);
+  };
+
+  const handleOpenSettings = () => {
+    setIsSettingsDrawerOpen(false);
     // Navigate to programs tab with user-settings sub-tab
     if (navigateToTab) {
       navigateToTab('programs', 'user-settings');
@@ -143,6 +151,75 @@ export default function TrainerInterface({ user }) {
           />
         </main>
       </div>
+
+      {/* Settings Drawer */}
+      <Drawer open={isSettingsDrawerOpen} onOpenChange={setIsSettingsDrawerOpen}>
+        <DrawerContent dir="rtl">
+          <DrawerHeader className="text-right">
+            <div className="flex items-center gap-4 mb-4">
+              {user?.profile_image_url ? (
+                <img 
+                  src={user.profile_image_url}
+                  alt={user?.name || 'מאמן'}
+                  className="w-16 h-16 rounded-full object-cover border-2 border-emerald-500"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center border-2 border-emerald-500">
+                  <UserIcon className="w-8 h-8 text-emerald-600" />
+                </div>
+              )}
+              <div>
+                <DrawerTitle className="text-2xl">{user?.name || 'מאמן'}</DrawerTitle>
+                <DrawerDescription className="text-base mt-1">
+                  {user?.email || ''}
+                </DrawerDescription>
+              </div>
+            </div>
+          </DrawerHeader>
+          
+          <div className="px-4 pb-4 space-y-2">
+            <Button
+              variant="outline"
+              className="w-full justify-start text-right"
+              onClick={handleOpenSettings}
+            >
+              <Settings className="w-5 h-5 ml-3" />
+              הגדרות משתמש
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-start text-right"
+              onClick={() => {
+                setIsSettingsDrawerOpen(false);
+                if (navigateToTab) {
+                  navigateToTab('control-center');
+                } else {
+                  setActiveAdminTab('control-center');
+                }
+              }}
+            >
+              <LayoutDashboard className="w-5 h-5 ml-3" />
+              מרכז שליטה
+            </Button>
+          </div>
+
+          <DrawerFooter className="border-t pt-4">
+            <Button
+              variant="outline"
+              className="w-full justify-start text-right text-red-600 hover:text-red-700 hover:bg-red-50"
+              onClick={handleLogout}
+            >
+              <LogOut className="w-5 h-5 ml-3" />
+              התנתק
+            </Button>
+            <DrawerClose asChild>
+              <Button variant="ghost" className="w-full">
+                סגור
+              </Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }

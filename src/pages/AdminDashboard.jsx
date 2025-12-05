@@ -9,7 +9,7 @@ import { User } from '@/api/entities';
 import LockedScreen from '@/components/auth/LockedScreen';
 
 // Lucide Icons for navigation
-import { Users, BarChart, Dumbbell, MessageSquare, ClipboardCheck, Mail, TrendingUp, Scale, Settings, Key, LayoutDashboard, FileText, Activity, Lock } from 'lucide-react'; // Added Activity and Lock
+import { Users, BarChart, Dumbbell, MessageSquare, ClipboardCheck, Mail, TrendingUp, Scale, Settings, Key, LayoutDashboard, FileText, Activity, Lock, Bell } from 'lucide-react'; // Added Activity, Lock, and Bell
 
 // Import all management components
 import UserManagement from '@/components/admin/UserManagement';
@@ -34,6 +34,7 @@ import UnifiedNotificationsViewer from '@/components/admin/UnifiedNotificationsV
 import ControlCenter from '@/components/admin/ControlCenter';
 import ContractEditor from '@/components/admin/ContractEditor';
 import UserTracker from '@/components/admin/BoosterPlusManager'; // Changed BoosterPlusManager import to UserTracker
+import GroupNotifications from '@/components/admin/GroupNotifications';
 
 // UI components for ContractEditor dialog (Dialog, DialogContent, etc. are no longer used for ContractEditor)
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -448,11 +449,15 @@ export default function AdminDashboard({ activeTab: externalActiveTab, setActive
 
   const ProgressMediaTab = () => (
     <Tabs value={progressMediaTab} onValueChange={(value) => handleSubTabChange('progress-media', value)} className="w-full">
-      {/* Adjusted grid-cols to 7 after removing 'Shared Images' */}
-      <TabsList className="grid w-full grid-cols-2 sm:grid-cols-7 h-auto">
+      {/* Adjusted grid-cols to 8 after adding 'Group Notifications' */}
+      <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 h-auto">
         <TabsTrigger value="notification-status" className="text-xs sm:text-sm py-2 flex items-center justify-center gap-1">
           <ClipboardCheck className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
           סטטוס והתראות
+        </TabsTrigger>
+        <TabsTrigger value="group-notifications" className="text-xs sm:text-sm py-2 flex items-center justify-center gap-1">
+          <Bell className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+          התראות קבוצה
         </TabsTrigger>
         <TabsTrigger value="shared-meals" className="text-xs sm:text-sm py-2">ארוחות משותפות</TabsTrigger>
         <TabsTrigger value="trainee-reports" className="text-xs sm:text-sm py-2">דוחות מתאמנים</TabsTrigger>
@@ -465,6 +470,9 @@ export default function AdminDashboard({ activeTab: externalActiveTab, setActive
       </TabsList>
       <TabsContent value="notification-status" className="mt-4 sm:mt-6">
         <UnifiedNotificationsViewer />
+      </TabsContent>
+      <TabsContent value="group-notifications" className="mt-4 sm:mt-6">
+        <GroupNotifications />
       </TabsContent>
       <TabsContent value="shared-meals" className="mt-4 sm:mt-6">
         <SharedMealsViewer />

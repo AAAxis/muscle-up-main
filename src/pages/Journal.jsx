@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { User, Workout, WorkoutLog, PreMadeWorkout, ExerciseDefault } from "@/api/entities"; // Added ExerciseDefault
+import { User, Workout, WorkoutLog, PreMadeWorkout, ExerciseDefault, ExerciseDefinition } from "@/api/entities"; // Added ExerciseDefault and ExerciseDefinition
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,33 @@ const ensureExerciseKeys = (exercises) => {
     });
 };
 
+// Helper function to enrich exercises with ExerciseDefinition data (including images)
+const enrichExercisesWithDefinitions = async (exercises, exerciseDefinitionsMap) => {
+    if (!exercises || exercises.length === 0) return exercises;
+    
+    return exercises.map(exercise => {
+        // If exercise already has image data, return as is
+        if (exercise.exercisedb_image_url || exercise.video_url) {
+            return exercise;
+        }
+        
+        // Try to get definition data from map using definitionId
+        if (exercise.definitionId && exerciseDefinitionsMap.has(exercise.definitionId)) {
+            const definition = exerciseDefinitionsMap.get(exercise.definitionId);
+            return {
+                ...exercise,
+                exercisedb_image_url: definition.exercisedb_image_url,
+                video_url: exercise.video_url || definition.video_url,
+                category: exercise.category || definition.category,
+                muscle_group: exercise.muscle_group || definition.muscle_group,
+                equipment: exercise.equipment || definition.equipment,
+            };
+        }
+        
+        return exercise;
+    });
+};
+
 // Helper function to check if a workout is structured with parts
 const isPartedWorkout = (workout) => {
     return (workout.part_1_exercises?.length > 0 ||
@@ -75,6 +102,17 @@ export default function JournalPage() {
       setUser(currentUser);
       console.log("Journal: User loaded", currentUser);
 
+      // Load exercise definitions to enrich exercises with image data
+      const exerciseDefinitions = await ExerciseDefinition.list().catch(err => {
+        console.warn("Failed to load exercise definitions:", err);
+        return [];
+      });
+      
+      // Create a map for quick lookup
+      const exerciseDefinitionsMap = new Map(
+        exerciseDefinitions.map(def => [def.id, def])
+      );
+
       // Fetch all workouts for the user, both active and completed
       const allUserWorkouts = await Workout.filter(
         { created_by: currentUser.email },
@@ -85,14 +123,21 @@ export default function JournalPage() {
       let active = allUserWorkouts.find(w => w.status === "פעיל");
       
       // Data migration for active workouts without keys, and ensure they exist for React's reconciliation
+      // Also enrich exercises with definition data (including images)
       if (active) {
+        // Enrich exercises with definition data
+        const enrichedPart1 = await enrichExercisesWithDefinitions(active.part_1_exercises, exerciseDefinitionsMap);
+        const enrichedPart2 = await enrichExercisesWithDefinitions(active.part_2_exercises, exerciseDefinitionsMap);
+        const enrichedPart3 = await enrichExercisesWithDefinitions(active.part_3_exercises, exerciseDefinitionsMap);
+        const enrichedExercises = await enrichExercisesWithDefinitions(active.exercises, exerciseDefinitionsMap);
+        
         // Create a new object to ensure immutability before modifying properties
         active = {
           ...active,
-          part_1_exercises: ensureExerciseKeys(active.part_1_exercises),
-          part_2_exercises: ensureExerciseKeys(active.part_2_exercises),
-          part_3_exercises: ensureExerciseKeys(active.part_3_exercises),
-          exercises: ensureExerciseKeys(active.exercises),
+          part_1_exercises: ensureExerciseKeys(enrichedPart1),
+          part_2_exercises: ensureExerciseKeys(enrichedPart2),
+          part_3_exercises: ensureExerciseKeys(enrichedPart3),
+          exercises: ensureExerciseKeys(enrichedExercises),
         };
       }
 

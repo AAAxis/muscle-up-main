@@ -4,9 +4,25 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Check, CheckCircle, Undo2, Trash2, Plus } from 'lucide-react';
+import { Check, CheckCircle, Undo2, Trash2, Plus, Image as ImageIcon } from 'lucide-react';
 
 const ExerciseCard = ({ exercise, onUpdate, workout, partKey }) => {
+  // Helper function to get image URL from exercise
+  const getImageUrl = (ex) => {
+    if (ex?.exercisedb_image_url) {
+      if (ex.exercisedb_image_url.startsWith('http')) {
+        return ex.exercisedb_image_url;
+      }
+      return `https://v2.exercisedb.dev/images/${ex.exercisedb_image_url}`;
+    }
+    // Also check for cdn.exercisedb.dev format
+    if (ex?.exercisedb_image_url && ex.exercisedb_image_url.includes('cdn.exercisedb.dev')) {
+      return ex.exercisedb_image_url;
+    }
+    return null;
+  };
+
+  const imageUrl = getImageUrl(exercise);
 
   const handleExerciseUpdate = (updatedExercise) => {
     const updatedWorkout = {
@@ -48,12 +64,27 @@ const ExerciseCard = ({ exercise, onUpdate, workout, partKey }) => {
     <div
       className={`p-4 border rounded-lg transition-all duration-300 ${exercise.completed ? 'bg-green-50 border-green-200' : 'bg-white shadow-sm'}`}
     >
-      <div className="flex justify-between items-center mb-3">
-        <div>
-          <h4 className="font-semibold text-slate-800">{exercise.name}</h4>
-          {exercise.category && <p className="text-sm text-slate-500">{exercise.category}</p>}
+      <div className="flex justify-between items-start mb-3 gap-3">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          {/* Exercise Image Thumbnail */}
+          {imageUrl && (
+            <div className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+              <img
+                src={imageUrl}
+                alt={exercise.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <h4 className="font-semibold text-slate-800">{exercise.name}</h4>
+            {exercise.category && <p className="text-sm text-slate-500">{exercise.category}</p>}
+          </div>
         </div>
-        {exercise.completed && <Badge className="bg-green-600 text-white">בוצע</Badge>}
+        {exercise.completed && <Badge className="bg-green-600 text-white flex-shrink-0">בוצע</Badge>}
       </div>
       
       <div className="grid grid-cols-5 gap-2 text-xs text-center mb-2 font-medium text-slate-600">

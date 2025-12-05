@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, WeeklyTask, MonthlyGoal, ProgressPicture, CalorieTracking, UserGroup, WaterTracking, LectureView, WeeklyTaskTemplate } from '@/api/entities';
+import { User, WeeklyTask, MonthlyGoal, ProgressPicture, CalorieTracking, UserGroup, WaterTracking, LectureView, WeeklyTaskTemplate, CoachNotification } from '@/api/entities';
+import { SendFCMNotification } from '@/api/integrations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +12,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import WeeklyTaskTemplateManager from './WeeklyTaskTemplateManager';
 
-const BOOSTER_ACTIVATION_CODE = "2206";
 const BOOSTER_RESET_CODE = "1010";
 
 export default function BoosterProgramManager() {
@@ -21,7 +21,6 @@ export default function BoosterProgramManager() {
     const [targetType, setTargetType] = useState('user'); // 'user' or 'group'
     const [selectedUser, setSelectedUser] = useState(''); // For the old activation/reset
     const [selectedGroup, setSelectedGroup] = useState(''); // For the old activation/reset
-    const [activationCode, setActivationCode] = useState(''); // For the old activation/reset
     const [resetCode, setResetCode] = useState(''); // For the old activation/reset
     const [feedback, setFeedback] = useState({ type: '', message: '' });
     const [isLoadingUsers, setIsLoadingUsers] = useState(true);
@@ -59,13 +58,8 @@ export default function BoosterProgramManager() {
         return [];
     };
 
-    // Existing Booster Activation/Deactivation with codes
+    // Existing Booster Activation/Deactivation
     const handleBoosterActivation = async (enable) => {
-        if (activationCode !== BOOSTER_ACTIVATION_CODE) {
-            showFeedback('error', 'קוד הפעלה שגוי.');
-            return;
-        }
-        
         const targetUsers = getTargetUsers();
         if (targetUsers.length === 0) {
             showFeedback('error', 'יש לבחור מתאמן או קבוצה.');
@@ -73,11 +67,126 @@ export default function BoosterProgramManager() {
         }
         
         try {
+            const currentUser = await User.me();
+            let successCount = 0;
+            let notificationCount = 0;
+            let emailCount = 0;
+
             for (const user of targetUsers) {
-                await User.update(user.id, { booster_unlocked: enable });
+                // Update user status - set both booster_enabled and booster_unlocked
+                const updateData = {
+                    booster_unlocked: enable,
+                    booster_enabled: enable
+                };
+
+                // If enabling, also set status and start date
+                if (enable) {
+                    updateData.booster_status = 'in_progress';
+                    if (!user.booster_start_date) {
+                        updateData.booster_start_date = new Date().toISOString();
+                    }
+                } else {
+                    // If disabling, reset status
+                    updateData.booster_status = 'not_started';
+                    updateData.booster_start_date = null;
+                }
+
+                await User.update(user.id, updateData);
+                successCount++;
+
+                // Send notifications and email only when enabling
+                if (enable && user.email) {
+                    try {
+                        // Send push notification
+                        try {
+                            await SendFCMNotification({
+                                userId: user.id,
+                                userEmail: user.email,
+                                title: '🎉 גישה לתוכנית הבוסטר!',
+                                body: `שלום ${user.name || 'מתאמן/ת'}! קיבלת גישה לתוכנית הבוסטר. התחל עכשיו את המסע שלך!`,
+                                data: {
+                                    type: 'booster_access_granted',
+                                    userId: user.id
+                                }
+                            });
+                            notificationCount++;
+                        } catch (fcmError) {
+                            console.warn(`Failed to send FCM notification to ${user.email}:`, fcmError);
+                        }
+
+                        // Send email notification
+                        try {
+                            const emailTitle = '🎉 גישה לתוכנית הבוסטר!';
+                            const emailMessage = `שלום ${user.name || 'מתאמן/ת'}!
+
+ברכות! קיבלת גישה לתוכנית הבוסטר שלנו.
+
+עכשיו תוכל ליהנות מכל התכונות המיוחדות של התוכנית:
+• משימות שבועיות מותאמות אישית
+• מעקב התקדמות מפורט
+• תמיכה והדרכה צמודה
+• גישה לתוכן בלעדי
+
+התחל את המסע שלך עכשיו באפליקציה!
+
+בהצלחה,
+צוות Vitrix`;
+
+                            const emailResponse = await fetch('/api/send-group-email', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    userEmail: user.email, // Send to single user
+                                    title: emailTitle,
+                                    message: emailMessage
+                                }),
+                            });
+
+                            if (emailResponse.ok) {
+                                emailCount++;
+                            }
+                        } catch (emailError) {
+                            console.warn(`Failed to send email to ${user.email}:`, emailError);
+                        }
+
+                        // Create CoachNotification record
+                        try {
+                            await CoachNotification.create({
+                                user_email: user.email,
+                                user_name: user.name || 'מתאמן/ת',
+                                notification_type: 'booster_access_granted',
+                                title: 'גישה לתוכנית הבוסטר',
+                                message: 'קיבלת גישה לתוכנית הבוסטר. התחל עכשיו את המסע שלך!',
+                                sent_by: currentUser.email || 'system',
+                                sent_date: new Date().toISOString(),
+                                read: false
+                            });
+                        } catch (notificationError) {
+                            console.warn(`Failed to create CoachNotification for ${user.email}:`, notificationError);
+                        }
+                    } catch (notificationError) {
+                        console.warn(`Failed to send notifications to ${user.email}:`, notificationError);
+                    }
+                }
             }
-            showFeedback('success', `תוכנית הבוסטר ${enable ? 'הופעלה' : 'כובתה'} בהצלחה עבור ${targetUsers.length} מתאמנים.`);
-            setActivationCode('');
+
+            const message = `תוכנית הבוסטר ${enable ? 'הופעלה' : 'כובתה'} בהצלחה עבור ${successCount} מתאמנים.`;
+            const notificationMessage = enable 
+                ? ` ${notificationCount} התראות push ו-${emailCount} אימיילים נשלחו.`
+                : '';
+            
+            showFeedback('success', message + notificationMessage);
+            toast({ 
+                title: enable ? "✅ בוסטר הופעל בהצלחה" : "בוסטר כובה", 
+                description: message + notificationMessage,
+                duration: 5000
+            });
+            
+            // Reload users to update UI
+            const allUsers = await User.filter({});
+            setUsers(allUsers);
         } catch (error) {
             showFeedback('error', 'שגיאה בעדכון סטטוס הבוסטר.');
             console.error(error);
@@ -313,18 +422,12 @@ export default function BoosterProgramManager() {
                                 </div>
                             </div>
 
-                            {/* Booster Activation (with code) */}
+                            {/* Booster Activation */}
                             <div className="space-y-4 p-4 border rounded-lg">
-                                <h4 className="font-semibold flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-green-600"/>הפעלה / כיבוי תוכנית הבוסטר (קוד)</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <Label htmlFor="activation-code">קוד הפעלה נדרש</Label>
-                                        <Input id="activation-code" type="password" placeholder="הכנס קוד הפעלה" value={activationCode} onChange={e => setActivationCode(e.target.value)} />
-                                    </div>
-                                    <div className="flex items-end gap-2">
-                                        <Button onClick={() => handleBoosterActivation(true)} className="bg-green-600 hover:bg-green-700">הפעל תוכנית</Button>
-                                        <Button variant="outline" onClick={() => handleBoosterActivation(false)} className="border-red-300 text-red-700 hover:bg-red-50">כבה תוכנית</Button>
-                                    </div>
+                                <h4 className="font-semibold flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-green-600"/>הפעלה / כיבוי תוכנית הבוסטר</h4>
+                                <div className="flex items-end gap-2">
+                                    <Button onClick={() => handleBoosterActivation(true)} className="bg-green-600 hover:bg-green-700">הפעל תוכנית</Button>
+                                    <Button variant="outline" onClick={() => handleBoosterActivation(false)} className="border-red-300 text-red-700 hover:bg-red-50">כבה תוכנית</Button>
                                 </div>
                             </div>
 

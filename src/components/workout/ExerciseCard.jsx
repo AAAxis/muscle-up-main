@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Dumbbell, Clock, Repeat, Edit, Info, ChevronDown, ChevronUp, Video, StickyNote, Weight } from 'lucide-react';
+import { Dumbbell, Clock, Repeat, Edit, Info, ChevronDown, ChevronUp, Video, StickyNote, Weight, Image as ImageIcon } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
 import NumberPicker from './NumberPicker'; // Import the new component
 
@@ -21,6 +21,23 @@ const ExerciseCard = memo(({ exercise, partIndex, exerciseIndex, onSetChange, on
         setPickerConfig(config);
         setIsPickerOpen(true);
     };
+
+    // Helper function to get image URL from exercise
+    const getImageUrl = (ex) => {
+        if (ex?.exercisedb_image_url) {
+            if (ex.exercisedb_image_url.startsWith('http')) {
+                return ex.exercisedb_image_url;
+            }
+            return `https://v2.exercisedb.dev/images/${ex.exercisedb_image_url}`;
+        }
+        // Also check for cdn.exercisedb.dev format
+        if (ex?.exercisedb_image_url && ex.exercisedb_image_url.includes('cdn.exercisedb.dev')) {
+            return ex.exercisedb_image_url;
+        }
+        return null;
+    };
+
+    const imageUrl = getImageUrl(exercise);
 
     const SetRow = ({ set, setIndex }) => {
         const isTimeBased = set.duration_seconds > 0;
@@ -101,12 +118,27 @@ const ExerciseCard = memo(({ exercise, partIndex, exerciseIndex, onSetChange, on
         <>
             <Card className="overflow-hidden muscle-glass border-0 shadow-lg">
                 <CardHeader className="cursor-pointer" onClick={() => onToggleExpand(partIndex, exerciseIndex)}>
-                    <div className="flex justify-between items-center">
-                        <CardTitle className="flex items-center gap-3 text-slate-800">
-                            <Dumbbell className="w-6 h-6 text-blue-600" />
-                            <span className="text-xl">{exercise.name}</span>
-                        </CardTitle>
-                        {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                    <div className="flex justify-between items-center gap-3">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                            {/* Thumbnail Image */}
+                            {imageUrl && !isExpanded && (
+                                <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+                                    <img
+                                        src={imageUrl}
+                                        alt={exercise.name}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                            e.target.style.display = 'none';
+                                        }}
+                                    />
+                                </div>
+                            )}
+                            <CardTitle className="flex items-center gap-3 text-slate-800 flex-1 min-w-0">
+                                <Dumbbell className="w-6 h-6 text-blue-600 flex-shrink-0" />
+                                <span className="text-xl truncate">{exercise.name}</span>
+                            </CardTitle>
+                        </div>
+                        {isExpanded ? <ChevronUp className="w-5 h-5 flex-shrink-0" /> : <ChevronDown className="w-5 h-5 flex-shrink-0" />}
                     </div>
                     {exercise.category && <Badge variant="secondary" className="mt-2">{exercise.category}</Badge>}
                 </CardHeader>
@@ -120,6 +152,23 @@ const ExerciseCard = memo(({ exercise, partIndex, exerciseIndex, onSetChange, on
                         >
                             <CardContent className="pt-0 pb-4">
                                 <div className="space-y-4">
+                                    {/* Exercise Image */}
+                                    {imageUrl && (
+                                        <div className="mt-2">
+                                            <div className="rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                                                <img
+                                                    src={imageUrl}
+                                                    alt={exercise.name}
+                                                    className="w-full h-auto max-h-64 object-contain"
+                                                    onError={(e) => {
+                                                        e.target.style.display = 'none';
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Exercise Video */}
                                     {exercise.video_url && (
                                         <div className="mt-2">
                                            <VideoPlayer videoUrl={exercise.video_url} />
