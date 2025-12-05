@@ -202,6 +202,11 @@ const ManualWorkoutBuilder = ({ templateToLoad, onTemplateLoaded, user, users, g
     }
 
     setIsSending(true);
+    let emailCount = 0;
+    let notificationCount = 0;
+    let emailError = null;
+    let notificationError = null;
+
     try {
       const dataToSave = {
         ...workoutData,
@@ -213,11 +218,155 @@ const ManualWorkoutBuilder = ({ templateToLoad, onTemplateLoaded, user, users, g
       await PreMadeWorkout.create(dataToSave);
 
       const targetEmails = getTargetEmails();
+      const subject = `🏋️ אימון חדש: ${workoutData.workout_title}`;
+      const messageBody = `נוצר אימון חדש: ${workoutData.workout_title}${workoutData.workout_description ? '\n\n' + workoutData.workout_description : ''}`;
 
-      // Create notifications for users instead of sending emails
+      // Determine if we're sending to a group or individual users
+      const isGroup = targetType === 'group';
+      const groupName = isGroup ? workoutData.target_user_email : null;
+
+      // PRIORITY 1: Send emails FIRST (emails are prioritized)
+      console.log('📧 [WORKOUT] PRIORITY: Sending emails FIRST for workout:', workoutData.workout_title);
+      try {
+        if (isGroup) {
+          // Send to group
+          const emailResponse = await fetch('/api/send-group-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              groupName: groupName,
+              title: subject,
+              message: messageBody
+            }),
+          });
+
+          if (emailResponse.ok) {
+            const emailResult = await emailResponse.json();
+            emailCount = emailResult.successCount || 0;
+            console.log(`✅ [WORKOUT] Sent ${emailCount} emails to group ${groupName}`);
+          } else {
+            const errorData = await emailResponse.json();
+            emailError = errorData.error || 'שגיאה בשליחת אימיילים';
+            console.error('❌ [WORKOUT] Email API error:', errorData);
+          }
+        } else {
+          // Send to individual users - PRIORITIZE EMAILS
+          console.log(`📧 [WORKOUT] Sending emails to ${targetEmails.length} individual users`);
+          for (let i = 0; i < targetEmails.length; i++) {
+            const email = targetEmails[i];
+            try {
+              console.log(`📧 [WORKOUT] Sending email ${i + 1}/${targetEmails.length} to: ${email}`);
+              const emailResponse = await fetch('/api/send-group-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userEmail: email,
+                  title: subject,
+                  message: messageBody
+                }),
+              });
+
+              if (emailResponse.ok) {
+                const emailResult = await emailResponse.json();
+                if (emailResult.success && emailResult.successCount > 0) {
+                  emailCount++;
+                  console.log(`✅ [WORKOUT] Email sent successfully to: ${email}`);
+                } else {
+                  console.warn(`⚠️ [WORKOUT] Email API returned success=false for: ${email}`, emailResult);
+                }
+              } else {
+                const errorData = await emailResponse.json().catch(() => ({ error: 'Unknown error' }));
+                console.error(`❌ [WORKOUT] Email API error for ${email}:`, errorData);
+              }
+            } catch (err) {
+              console.error(`❌ [WORKOUT] Failed to send email to ${email}:`, err);
+            }
+          }
+          console.log(`✅ ✅ ✅ [WORKOUT] EMAILS SENT: ${emailCount} out of ${targetEmails.length} users`);
+        }
+      } catch (error) {
+        console.error('❌ [WORKOUT] Error sending emails:', error);
+        emailError = error.message;
+      }
+
+      // PRIORITY 2: Send push notifications AFTER emails (only if emails succeeded or as secondary)
+      // Emails are the priority, so we continue even if notifications fail
+      try {
+        console.log('📱 [WORKOUT] Sending push notifications for workout:', workoutData.workout_title);
+        if (isGroup) {
+          // Send to group
+          const notificationResponse = await fetch('/api/send-group-notification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              groupName: groupName,
+              title: subject,
+              body: messageBody,
+              data: {
+                type: 'new_workout',
+                workout_title: workoutData.workout_title,
+                track_open: 'true'
+              }
+            }),
+          });
+
+          if (notificationResponse.ok) {
+            const notificationResult = await notificationResponse.json();
+            notificationCount = notificationResult.successCount || 0;
+            console.log(`✅ [WORKOUT] Sent ${notificationCount} push notifications to group ${groupName}`);
+          } else {
+            const errorData = await notificationResponse.json();
+            notificationError = errorData.error || 'שגיאה בשליחת התראות push';
+            console.error('❌ [WORKOUT] Notification API error:', errorData);
+          }
+        } else {
+          // For individual users, try to find their group and send to that group
+          // Or send to each user individually if they have a group
+          for (const email of targetEmails) {
+            const currentUser = users.find(u => u.email === email);
+            if (currentUser && currentUser.group_names && currentUser.group_names.length > 0) {
+              // User belongs to a group, send to that group
+              try {
+                const userGroup = currentUser.group_names[0]; // Use first group
+                const notificationResponse = await fetch('/api/send-group-notification', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    groupName: userGroup,
+                    title: subject,
+                    body: messageBody,
+                    data: {
+                      type: 'new_workout',
+                      workout_title: workoutData.workout_title,
+                      track_open: 'true',
+                      target_user_email: email // Filter to this specific user
+                    }
+                  }),
+                });
+
+                if (notificationResponse.ok) {
+                  const notificationResult = await notificationResponse.json();
+                  // Only count if this specific user received the notification
+                  // Since we're sending to a group, we can't be 100% sure, but we'll count it
+                  if (notificationResult.successCount > 0) {
+                    notificationCount++;
+                  }
+                }
+              } catch (err) {
+                console.error(`❌ [WORKOUT] Failed to send push notification to ${email}:`, err);
+              }
+            }
+          }
+          console.log(`✅ [WORKOUT] Sent push notifications to ${notificationCount} users`);
+        }
+      } catch (error) {
+        console.error('❌ [WORKOUT] Error sending push notifications:', error);
+        notificationError = error.message;
+      }
+
+      // Create CoachNotification records for all users
       for (const email of targetEmails) {
         const currentUser = users.find(u => u.email === email);
-        const subject = `🏋️ אימון חדש: ${workoutData.workout_title}`;
         
         await CoachNotification.create({
           user_email: email,
@@ -225,7 +374,7 @@ const ManualWorkoutBuilder = ({ templateToLoad, onTemplateLoaded, user, users, g
           coach_email: 'system', // System notification
           notification_type: 'new_workout',
           notification_title: subject,
-          notification_message: `נוצר אימון חדש: ${workoutData.workout_title}`,
+          notification_message: messageBody,
           notification_details: {
             workout_title: workoutData.workout_title,
             workout_description: workoutData.workout_description,
@@ -236,12 +385,52 @@ const ManualWorkoutBuilder = ({ templateToLoad, onTemplateLoaded, user, users, g
         });
       }
 
-      setSuccessMessage('האימון נשלח בהצלחה למתאמנים!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      // Build success message with counts - PRIORITIZE EMAIL COUNT
+      let successMessage = 'האימון נשלח בהצלחה למתאמנים!';
+      const details = [];
+      
+      // Show email count FIRST (priority)
+      if (emailCount > 0) {
+        details.push(`📧 ${emailCount} אימיילים נשלחו`);
+      } else if (targetEmails.length > 0) {
+        details.push(`⚠️ אימיילים: לא נשלחו (${targetEmails.length} משתמשים)`);
+      }
+      
+      // Show notification count second
+      if (notificationCount > 0) {
+        details.push(`📱 ${notificationCount} התראות push נשלחו`);
+      }
+      
+      if (details.length > 0) {
+        successMessage += `\n${details.join('\n')}`;
+      }
+      
+      if (emailError || notificationError) {
+        const errors = [];
+        if (emailError) errors.push(`אימיילים: ${emailError}`);
+        if (notificationError) errors.push(`התראות: ${notificationError}`);
+        successMessage += `\n⚠️ אזהרות: ${errors.join(', ')}`;
+      }
+      
+      // Log final summary
+      console.log('📊 [WORKOUT] FINAL SUMMARY:', {
+        workoutTitle: workoutData.workout_title,
+        targetType,
+        totalUsers: targetEmails.length,
+        emailsSent: emailCount,
+        notificationsSent: notificationCount,
+        emailError,
+        notificationError
+      });
+
+      setSuccessMessage(successMessage);
+      setTimeout(() => setSuccessMessage(''), 5000);
       resetForm();
       if (onWorkoutSaved) onWorkoutSaved();
     } catch (error) {
       console.error('Error sending workout:', error);
+      setSuccessMessage(`שגיאה בשליחת האימון: ${error.message}`);
+      setTimeout(() => setSuccessMessage(''), 5000);
     } finally {
       setIsSending(false);
     }

@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { GroupMessage, User, UserGroup } from '@/api/entities';
+import { auth } from '@/api/firebaseConfig';
 // SendEmail removed - using CoachNotification instead
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -220,7 +221,21 @@ export default function GroupMessaging({ groups }) {
         setFeedback({ type: '', message: '' });
 
         try {
-            const currentUser = await User.me();
+            // Try to get current user, with fallback for network errors
+            let currentUser;
+            try {
+                currentUser = await User.me();
+            } catch (userError) {
+                console.warn('⚠️ [FRONTEND] User.me() failed, using Firebase auth fallback:', userError);
+                // Fallback: get user email from Firebase auth directly (no token refresh needed)
+                const firebaseUser = auth.currentUser;
+                if (!firebaseUser || !firebaseUser.email) {
+                    throw new Error('לא ניתן לקבל את פרטי המשתמש. אנא נסה להתחבר מחדש.');
+                }
+                // Create a minimal user object with just the email
+                currentUser = { email: firebaseUser.email };
+            }
+            
             const groupUsers = getUsersInGroup(selectedGroup);
             
             if (groupUsers.length === 0) {

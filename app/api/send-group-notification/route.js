@@ -194,6 +194,26 @@ export async function POST(request) {
     console.log(`📱 Sending notifications to ${uniqueTokens.length} tokens from ${usersSnapshot.size} users`);
 
     // Build notification payload
+    // FCM requires all data values to be strings - convert everything to strings
+    const stringifiedData = {};
+    if (data && typeof data === 'object') {
+      Object.keys(data).forEach(key => {
+        const value = data[key];
+        // Convert all values to strings
+        if (value === null || value === undefined) {
+          stringifiedData[key] = '';
+        } else if (typeof value === 'object') {
+          stringifiedData[key] = JSON.stringify(value);
+        } else {
+          stringifiedData[key] = String(value);
+        }
+      });
+      console.log('📦 Converting data payload to strings:', {
+        original: data,
+        converted: stringifiedData
+      });
+    }
+    
     const message = {
       notification: {
         title,
@@ -201,10 +221,10 @@ export async function POST(request) {
         ...(imageUrl && { imageUrl })
       },
       data: {
-        ...data,
+        ...stringifiedData,
         timestamp: Date.now().toString(),
         source: 'dashboard',
-        groupName: groupName
+        groupName: String(groupName)
       },
       android: {
         priority: 'high',
