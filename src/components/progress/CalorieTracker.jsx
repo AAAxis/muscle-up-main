@@ -113,6 +113,7 @@ export default function CalorieTracker({ user: initialUser, calorieEntries: init
     const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
     const [isSaveTemplateDialogOpen, setIsSaveTemplateDialogOpen] = useState(false);
     const [newTemplateName, setNewTemplateName] = useState('');
+    const [activeTab, setActiveTab] = useState('planner');
 
     // Force refresh when user data changes (e.g., calorie_target updated by coach)
     useEffect(() => {
@@ -203,6 +204,18 @@ export default function CalorieTracker({ user: initialUser, calorieEntries: init
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
+    };
+
+    const handleAddFirstMeal = () => {
+        resetForm();
+        setActiveTab('add');
+        // Scroll to the form
+        setTimeout(() => {
+            const formElement = document.querySelector('[data-tab="add"]');
+            if (formElement) {
+                formElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 100);
     };
 
     const handleInputChange = (id, value) => {
@@ -767,7 +780,7 @@ export default function CalorieTracker({ user: initialUser, calorieEntries: init
                         )}
 
                         {/* AI Food Analysis Form */}
-                        <Tabs defaultValue="planner" className="w-full">
+                        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                             <TabsList className="grid w-full grid-cols-3 bg-slate-100 p-1 rounded-lg">
                                 <TabsTrigger value="planner" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-400 data-[state=active]:to-blue-400 data-[state=active]:text-white data-[state=active]:shadow-md">תכנון תפריט</TabsTrigger>
                                 <TabsTrigger value="add" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-orange-400 data-[state=active]:to-yellow-400 data-[state=active]:text-white data-[state=active]:shadow-md">הוספת ארוחה</TabsTrigger>
@@ -1150,7 +1163,7 @@ export default function CalorieTracker({ user: initialUser, calorieEntries: init
                                     <Utensils className="w-16 h-16 mx-auto mb-4 text-slate-300" />
                                     <p>עדיין לא נרשמו ארוחות</p>
                                     <p className="text-sm">התחל לתעד את הארוחות שלך כדי לעקוב אחר התזונה שלך!</p>
-                                    <Button onClick={resetForm}>
+                                    <Button onClick={handleAddFirstMeal} className="mt-4">
                                         <PlusCircle className="w-4 h-4 mr-2" />
                                         הוסף ארוחה ראשונה
                                     </Button>
