@@ -123,7 +123,8 @@ export default function LecturesManager() {
         try {
             const lectureData = {
                 ...formData,
-                created_by_coach: 'נדיה בלשוב'
+                created_by_coach: 'נדיה בלשוב',
+                ...(editingLecture ? {} : { created_date: new Date().toISOString() }),
             };
 
             if (editingLecture) {
@@ -177,12 +178,12 @@ export default function LecturesManager() {
 
     const getLectureStatus = (lecture) => {
         const now = new Date();
-        const startDate = parseISO(lecture.start_date);
+        const startDate = lecture.start_date ? parseISO(lecture.start_date) : new Date();
         const endDate = lecture.end_date ? parseISO(lecture.end_date) : null;
 
         if (!lecture.is_active) {
             return { label: 'לא פעילה', color: 'bg-gray-100 text-gray-600' };
-        } else if (isFuture(startDate)) {
+        } else if (lecture.start_date && isFuture(startDate)) {
             return { label: 'מתוכננת', color: 'bg-blue-100 text-blue-800' };
         } else if (endDate && isPast(endDate)) {
             return { label: 'הסתיימה', color: 'bg-red-100 text-red-800' };
@@ -211,6 +212,14 @@ export default function LecturesManager() {
                 return { text: 'לא צוין', icon: Users, color: 'text-gray-600' };
         }
     };
+
+    const getYouTubeThumbnail = (url) => {
+        if (!url) return null;
+        const match = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : null;
+    };
+
+    const getThumbnail = (lecture) => lecture.thumbnail_url || getYouTubeThumbnail(lecture.video_url);
 
     const getMediaType = (videoUrl) => {
         if (videoUrl?.includes('drive.google.com')) {
@@ -325,23 +334,36 @@ export default function LecturesManager() {
                                                                 className="border-b hover:bg-gray-50 transition-colors"
                                                             >
                                                                 <td className="p-4">
-                                                                    <div>
-                                                                        <div className="font-medium">{lecture.title}</div>
-                                                                        {lecture.description && (
-                                                                            <div className="text-sm text-gray-500 mt-1">
-                                                                                {lecture.description.length > 50 
-                                                                                    ? `${lecture.description.slice(0, 50)}...` 
-                                                                                    : lecture.description}
+                                                                    <div className="flex items-center gap-3">
+                                                                        {getThumbnail(lecture) ? (
+                                                                            <img
+                                                                                src={getThumbnail(lecture)}
+                                                                                alt={lecture.title}
+                                                                                className="w-20 h-12 object-cover rounded flex-shrink-0"
+                                                                            />
+                                                                        ) : (
+                                                                            <div className="w-20 h-12 bg-gray-100 rounded flex items-center justify-center flex-shrink-0">
+                                                                                <Video className="w-5 h-5 text-gray-400" />
                                                                             </div>
                                                                         )}
-                                                                        <div className="flex items-center gap-2 mt-1">
-                                                                            <mediaInfo.icon className="w-4 h-4 text-blue-600" />
-                                                                            <span className="text-xs text-blue-600">{mediaInfo.text}</span>
+                                                                        <div>
+                                                                            <div className="font-medium">{lecture.title}</div>
+                                                                            {lecture.description && (
+                                                                                <div className="text-sm text-gray-500 mt-1">
+                                                                                    {lecture.description.length > 50
+                                                                                        ? `${lecture.description.slice(0, 50)}...`
+                                                                                        : lecture.description}
+                                                                                </div>
+                                                                            )}
+                                                                            <div className="flex items-center gap-2 mt-1">
+                                                                                <mediaInfo.icon className="w-4 h-4 text-blue-600" />
+                                                                                <span className="text-xs text-blue-600">{mediaInfo.text}</span>
+                                                                            </div>
                                                                         </div>
                                                                     </div>
                                                                 </td>
                                                                 <td className="p-4 text-sm">
-                                                                    {format(parseISO(lecture.created_date), 'dd/MM/yyyy HH:mm', { locale: he })}
+                                                                    {lecture.created_date ? format(parseISO(lecture.created_date), 'dd/MM/yyyy HH:mm', { locale: he }) : '—'}
                                                                 </td>
                                                                 <td className="p-4">
                                                                     <div className={`flex items-center gap-2 ${audience.color}`}>
@@ -439,7 +461,14 @@ export default function LecturesManager() {
                                                 exit={{ opacity: 0, y: -20 }}
                                                 layout
                                             >
-                                                <Card className="border shadow-sm">
+                                                <Card className="border shadow-sm overflow-hidden">
+                                                    {getThumbnail(lecture) && (
+                                                        <img
+                                                            src={getThumbnail(lecture)}
+                                                            alt={lecture.title}
+                                                            className="w-full h-40 object-cover"
+                                                        />
+                                                    )}
                                                     <CardContent className="p-4">
                                                         <div className="space-y-3">
                                                             <div className="flex items-start justify-between">
@@ -460,7 +489,7 @@ export default function LecturesManager() {
                                                                 <div className="flex items-center gap-2">
                                                                     <CalendarIcon className="w-4 h-4 text-gray-500" />
                                                                     <span>
-                                                                        {format(parseISO(lecture.created_date), 'dd/MM/yyyy')}
+                                                                        {lecture.created_date ? format(parseISO(lecture.created_date), 'dd/MM/yyyy') : '—'}
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex items-center gap-2">

@@ -57,7 +57,7 @@ const getMeasurementExplanation = (type, value, userGender, userAge, category) =
         height: {
             title: "גובה",
             explanation: "הגובה הוא מדד קבוע המשמש לחישוב מדדים נוספים כמו BMI ו-BMR.",
-            currentStatus: `הגובה שלך הוא ${value !== null && value !== undefined ? (value * 100).toFixed(0) : 'לא ידוע'} ס״מ.`,
+            currentStatus: `הגובה שלך הוא ${value !== null && value !== undefined ? (value > 3 ? Math.round(value) : (value * 100).toFixed(0)) : 'לא ידוע'} ס״מ.`,
             recommendations: "הגובה נקבע גנטית ואינו משתנה בבגרות. שמור על יציבה נכונה לבריאות העמוד השדרה."
         },
         bmi: {
@@ -342,12 +342,67 @@ export default function BoosterMeasurements({ user }) {
     // BMI calculation using latest weight and user height
     const calculatedBMI = useMemo(() => {
         const weight = latestUserWeight?.weight;
-        const height = user?.height;
-        if (weight > 0 && height > 0) {
-            return parseFloat((weight / (height ** 2)).toFixed(1));
+        const rawHeight = user?.height;
+        if (weight > 0 && rawHeight > 0) {
+            // Handle height stored as cm (>3) or meters (<=3)
+            const heightM = rawHeight > 3 ? rawHeight / 100 : rawHeight;
+            return parseFloat((weight / (heightM ** 2)).toFixed(1));
         }
         return null;
     }, [latestUserWeight?.weight, user?.height]);
+
+    // Estimate missing body composition values from available data
+    const estimatedMetrics = useMemo(() => {
+        const weight = latestUserWeight?.weight || 0;
+        const bmi = calculatedBMI || 0;
+        const userAge = age || 30;
+        const isMale = user?.gender === 'male';
+        const storedFat = latestCoachMeasurement?.fat_percentage;
+        const storedMuscle = latestCoachMeasurement?.muscle_mass;
+
+        // Estimate body fat from BMI (Deurenberg formula)
+        const fatPercentage = (storedFat != null && !isNaN(Number(storedFat))) ? Number(storedFat) :
+            (bmi > 0 ? parseFloat((1.20 * bmi + 0.23 * userAge - (isMale ? 16.2 : 5.4)).toFixed(1)) : null);
+
+        // Estimate muscle mass from weight and body fat
+        const muscleMass = (storedMuscle != null && !isNaN(Number(storedMuscle))) ? Number(storedMuscle) :
+            (weight > 0 && fatPercentage !== null ? parseFloat((weight * (1 - fatPercentage / 100) * 0.75).toFixed(1)) : null);
+
+        // Estimate BMR (Mifflin-St Jeor)
+        const storedBmr = latestCoachMeasurement?.bmr;
+        const rawH = user?.height;
+        const hCm = rawH > 3 ? Math.round(rawH) : Math.round(rawH * 100);
+        const bmr = (storedBmr != null && !isNaN(Number(storedBmr)) && Number(storedBmr) > 0) ? Number(storedBmr) :
+            (weight > 0 && hCm > 0 ? Math.round(10 * weight + 6.25 * hCm - 5 * userAge + (isMale ? 5 : -161)) : null);
+
+        // Estimate visceral fat
+        const storedVisceral = latestCoachMeasurement?.visceral_fat;
+        const visceralFat = (storedVisceral != null && !isNaN(Number(storedVisceral))) ? Number(storedVisceral) :
+            (bmi > 0 ? Math.max(1, Math.min(59, Math.round(
+                isMale ? (userAge * 0.15) + (bmi * 0.6) - 8 : (userAge * 0.12) + (bmi * 0.5) - 8
+            ))) : null);
+
+        // Estimate body type rating (1-9)
+        const storedRating = latestCoachMeasurement?.physique_rating;
+        const bodyTypeRating = (storedRating != null && !isNaN(Number(storedRating))) ? Number(storedRating) :
+            (fatPercentage !== null && weight > 0 ? Math.max(1, Math.min(9, Math.round(
+                9 - (fatPercentage / 8) + ((muscleMass || 0) / weight) * 3
+            ))) : null);
+
+        // Estimate water percentage
+        const storedWater = latestCoachMeasurement?.body_water_percentage;
+        const waterPercent = (storedWater != null && !isNaN(Number(storedWater))) ? Number(storedWater) :
+            (fatPercentage !== null ? parseFloat(((isMale ? 72 : 68) - fatPercentage * 0.6).toFixed(1)) : null);
+
+        // Estimate metabolic age
+        const storedMetaAge = latestCoachMeasurement?.metabolic_age;
+        const metabolicAge = (storedMetaAge != null && !isNaN(Number(storedMetaAge))) ? Number(storedMetaAge) :
+            (bmi > 0 && fatPercentage !== null ? Math.max(10, Math.round(
+                userAge + (bmi - 22) * 0.8 + (fatPercentage - (isMale ? 15 : 25)) * 0.3
+            )) : null);
+
+        return { fatPercentage, muscleMass, bmr, visceralFat, bodyTypeRating, waterPercent, metabolicAge };
+    }, [latestUserWeight?.weight, calculatedBMI, age, user?.gender, user?.height, latestCoachMeasurement]);
 
     const handleMeasurementClick = (type, value, category = null) => {
         if (value === null || value === undefined || value === 'N/A') return;
@@ -378,9 +433,9 @@ export default function BoosterMeasurements({ user }) {
     }
 
     const bmiCategory = getBMICategory(calculatedBMI);
-    const fatCategory = getFatPercentageCategory(latestCoachMeasurement?.fat_percentage, user.gender);
-    const metabolicAgeCategory = getMetabolicAgeStatus(latestCoachMeasurement?.metabolic_age, age);
-    const visceralFatCategory = getVisceralFatStatus(latestCoachMeasurement?.visceral_fat);
+    const fatCategory = getFatPercentageCategory(estimatedMetrics.fatPercentage, user.gender);
+    const metabolicAgeCategory = getMetabolicAgeStatus(estimatedMetrics.metabolicAge, age);
+    const visceralFatCategory = getVisceralFatStatus(estimatedMetrics.visceralFat);
 
     const formatValue = (value, fractionDigits = 1) => {
         if (value === null || value === undefined) return 'N/A';
@@ -429,7 +484,7 @@ export default function BoosterMeasurements({ user }) {
                         <MeasurementCard
                             icon={Ruler}
                             title="גובה"
-                            value={user?.height ? Math.round(user.height * 100) : 'N/A'}
+                            value={user?.height ? (user.height > 3 ? Math.round(user.height) : Math.round(user.height * 100)) : 'N/A'}
                             unit="ס״מ"
                             currentStatus={getCurrentStatusExplanation('height', user?.height)}
                             onClick={() => handleMeasurementClick('height', user?.height)}
@@ -464,28 +519,28 @@ export default function BoosterMeasurements({ user }) {
                         <MeasurementCard
                             icon={Activity}
                             title="אחוז שומן"
-                            value={formatValue(latestCoachMeasurement?.fat_percentage, 1)}
+                            value={formatValue(estimatedMetrics.fatPercentage, 1)}
                             unit="%"
                             status={fatCategory}
                             ranges={getMeasurementRanges('fat_percentage', user.gender, age)}
-                            currentStatus={getCurrentStatusExplanation('fat_percentage', latestCoachMeasurement?.fat_percentage, fatCategory, user.gender, age)}
-                            onClick={() => handleMeasurementClick('fat_percentage', latestCoachMeasurement?.fat_percentage, fatCategory)}
+                            currentStatus={getCurrentStatusExplanation('fat_percentage', estimatedMetrics.fatPercentage, fatCategory, user.gender, age)}
+                            onClick={() => handleMeasurementClick('fat_percentage', estimatedMetrics.fatPercentage, fatCategory)}
                         />
                         <MeasurementCard
                             icon={Dumbbell}
                             title="מסת שריר"
-                            value={formatValue(latestCoachMeasurement?.muscle_mass, 1)}
+                            value={formatValue(estimatedMetrics.muscleMass, 1)}
                             unit="ק״ג"
-                            currentStatus={getCurrentStatusExplanation('muscle_mass', latestCoachMeasurement?.muscle_mass)}
-                            onClick={() => handleMeasurementClick('muscle_mass', latestCoachMeasurement?.muscle_mass)}
+                            currentStatus={getCurrentStatusExplanation('muscle_mass', estimatedMetrics.muscleMass)}
+                            onClick={() => handleMeasurementClick('muscle_mass', estimatedMetrics.muscleMass)}
                         />
                         <MeasurementCard
                             icon={Zap}
                             title="BMR"
-                            value={formatIntValue(latestCoachMeasurement?.bmr)}
+                            value={formatIntValue(estimatedMetrics.bmr)}
                             unit="קק״ל/יום"
-                            currentStatus={getCurrentStatusExplanation('bmr', latestCoachMeasurement?.bmr)}
-                            onClick={() => handleMeasurementClick('bmr', latestCoachMeasurement?.bmr)}
+                            currentStatus={getCurrentStatusExplanation('bmr', estimatedMetrics.bmr)}
+                            onClick={() => handleMeasurementClick('bmr', estimatedMetrics.bmr)}
                         />
                     </div>
                 </section>
@@ -500,40 +555,40 @@ export default function BoosterMeasurements({ user }) {
                         <MeasurementCard
                             icon={Recycle}
                             title="גיל מטבולי"
-                            value={formatIntValue(latestCoachMeasurement?.metabolic_age)}
+                            value={formatIntValue(estimatedMetrics.metabolicAge)}
                             unit="שנים"
                             status={metabolicAgeCategory}
                             ranges={getMeasurementRanges('metabolic_age', user.gender, age)}
-                            currentStatus={getCurrentStatusExplanation('metabolic_age', latestCoachMeasurement?.metabolic_age, metabolicAgeCategory, user.gender, age)}
-                            onClick={() => handleMeasurementClick('metabolic_age', latestCoachMeasurement?.metabolic_age, metabolicAgeCategory)}
+                            currentStatus={getCurrentStatusExplanation('metabolic_age', estimatedMetrics.metabolicAge, metabolicAgeCategory, user.gender, age)}
+                            onClick={() => handleMeasurementClick('metabolic_age', estimatedMetrics.metabolicAge, metabolicAgeCategory)}
                         />
                         <MeasurementCard
                             icon={ShieldAlert}
                             title="שומן ויסצרלי"
-                            value={formatIntValue(latestCoachMeasurement?.visceral_fat)}
+                            value={formatIntValue(estimatedMetrics.visceralFat)}
                             unit="רמה"
                             status={visceralFatCategory}
                             ranges={getMeasurementRanges('visceral_fat', user.gender, age)}
-                            currentStatus={getCurrentStatusExplanation('visceral_fat', latestCoachMeasurement?.visceral_fat, visceralFatCategory, user.gender, age)}
-                            onClick={() => handleMeasurementClick('visceral_fat', latestCoachMeasurement?.visceral_fat, visceralFatCategory)}
+                            currentStatus={getCurrentStatusExplanation('visceral_fat', estimatedMetrics.visceralFat, visceralFatCategory, user.gender, age)}
+                            onClick={() => handleMeasurementClick('visceral_fat', estimatedMetrics.visceralFat, visceralFatCategory)}
                         />
                         <MeasurementCard
                             icon={Droplets}
                             title="אחוזי מים"
-                            value={formatValue(latestCoachMeasurement?.body_water_percentage, 1)}
+                            value={formatValue(estimatedMetrics.waterPercent, 1)}
                             unit="%"
                             ranges={getMeasurementRanges('body_water_percentage', user.gender, age)}
-                            currentStatus={getCurrentStatusExplanation('body_water_percentage', latestCoachMeasurement?.body_water_percentage, null, user.gender, age)}
-                            onClick={() => handleMeasurementClick('body_water_percentage', latestCoachMeasurement?.body_water_percentage)}
+                            currentStatus={getCurrentStatusExplanation('body_water_percentage', estimatedMetrics.waterPercent, null, user.gender, age)}
+                            onClick={() => handleMeasurementClick('body_water_percentage', estimatedMetrics.waterPercent)}
                         />
                         <MeasurementCard
                             icon={Dna}
                             title="דירוג מבנה גוף"
-                            value={formatIntValue(latestCoachMeasurement?.physique_rating)}
+                            value={formatIntValue(estimatedMetrics.bodyTypeRating)}
                             unit="/9"
                             ranges={getMeasurementRanges('physique_rating', user.gender, age)}
-                            currentStatus={getCurrentStatusExplanation('physique_rating', latestCoachMeasurement?.physique_rating, null, user.gender, age)}
-                            onClick={() => handleMeasurementClick('physique_rating', latestCoachMeasurement?.physique_rating)}
+                            currentStatus={getCurrentStatusExplanation('physique_rating', estimatedMetrics.bodyTypeRating, null, user.gender, age)}
+                            onClick={() => handleMeasurementClick('physique_rating', estimatedMetrics.bodyTypeRating)}
                         />
                     </div>
                 </section>

@@ -65,7 +65,6 @@ const processAndGroupData = (meals, water, users) => {
     });
 
     water.forEach(w => {
-        if (!w.photo_url) return;
         const email = w.user_email || w.created_by;
         if (!email) return;
         ensureUser(email);
@@ -113,19 +112,19 @@ export default function SharedMealsViewer() {
       
       await delay(300); // Small delay between requests
       
-      // Load all meals explicitly shared with coach (regardless of image presence)
-      console.log('Loading shared meals (shared_with_coach: true)...');
+      // Load all meals from all users (not just shared ones)
+      console.log('Loading all user meals...');
       const fetchedSharedMeals = await withRetry(async () => {
-        return await CalorieTracking.filter({ shared_with_coach: true }, '-meal_timestamp', 500); 
+        return await CalorieTracking.filter({}, '-meal_timestamp', 1000);
       });
-      setSharedMeals(fetchedSharedMeals); // This state holds all relevant shared meals for calculations
+      setSharedMeals(fetchedSharedMeals); // This state holds all meals for calculations
       
       await delay(300); // Small delay
       
-      // Load water photos
-      console.log('Loading water photos...');
+      // Load all water tracking entries
+      console.log('Loading water tracking...');
       const allWater = await withRetry(async () => {
-        return await WaterTracking.filter({ photo_url: { '$ne': null } }, '-created_date', 500);
+        return await WaterTracking.filter({}, '-created_date', 1000);
       });
 
       // Process data for the main album grid. 
@@ -1260,29 +1259,60 @@ export default function SharedMealsViewer() {
                 <ScrollArea className="h-[60vh] sm:h-[70vh]">
                   <div className="space-y-4 pr-2">
                     {selectedUserAlbum?.waterPhotos && selectedUserAlbum.waterPhotos.length > 0 ? (
-                      selectedUserAlbum.waterPhotos.map(water => (
-                        <Card key={water.id} className="p-3 sm:p-4">
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
-                            <img 
-                              src={water.photo_url} 
-                              alt="שתיית מים" 
-                              className="w-full sm:w-20 sm:h-20 h-32 rounded-lg object-cover cursor-pointer" 
-                              onClick={() => handleImageClick(water.photo_url, "תמונת שתיית מים")}
-                            />
-                            <div className="flex-1">
-                              <p className="font-semibold text-sm sm:text-base">💧 {water.amount_ml}ml מים</p>
-                              <p className="text-xs sm:text-sm text-slate-500">{formatDateTime(water.created_date)}</p>
-                              {water.coach_note && (
-                                <p className="text-xs sm:text-sm text-amber-700 bg-amber-50 p-2 rounded mt-2">{water.coach_note}</p>
+                      <>
+                        {/* Daily water summary */}
+                        {(() => {
+                          const totalMl = selectedUserAlbum.waterPhotos.reduce((sum, w) => sum + (w.amount_ml || 0), 0);
+                          const user = users.find(u => u.email === selectedUserAlbum.user.email);
+                          const goalMl = user?.daily_water_goal || 2500;
+                          return (
+                            <Card className="p-3 sm:p-4 bg-blue-50 border-blue-200">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Droplets className="w-5 h-5 text-blue-600" />
+                                  <span className="font-semibold text-blue-800">סה״כ: {totalMl}ml</span>
+                                </div>
+                                <span className="text-sm text-blue-600">{selectedUserAlbum.waterPhotos.length} רשומות</span>
+                              </div>
+                            </Card>
+                          );
+                        })()}
+                        {selectedUserAlbum.waterPhotos.map(water => (
+                          <Card key={water.id} className="p-3 sm:p-4">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+                              {water.photo_url ? (
+                                <img
+                                  src={water.photo_url}
+                                  alt="שתיית מים"
+                                  className="w-full sm:w-20 sm:h-20 h-32 rounded-lg object-cover cursor-pointer"
+                                  onClick={() => handleImageClick(water.photo_url, "תמונת שתיית מים")}
+                                />
+                              ) : (
+                                <div className="w-full sm:w-20 sm:h-20 h-16 rounded-lg bg-blue-100 flex items-center justify-center">
+                                  <Droplets className="w-8 h-8 text-blue-400" />
+                                </div>
                               )}
+                              <div className="flex-1">
+                                <p className="font-semibold text-sm sm:text-base">💧 {water.amount_ml}ml מים</p>
+                                <p className="text-xs sm:text-sm text-slate-500">
+                                  {water.time_logged && <span>{water.time_logged} • </span>}
+                                  {formatDateTime(water.created_date || water.date)}
+                                </p>
+                                {water.container_type && (
+                                  <p className="text-xs text-slate-400">{water.container_type}</p>
+                                )}
+                                {water.coach_note && (
+                                  <p className="text-xs sm:text-sm text-amber-700 bg-amber-50 p-2 rounded mt-2">{water.coach_note}</p>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </Card>
-                      ))
+                          </Card>
+                        ))}
+                      </>
                     ) : (
                       <div className="text-center py-12 text-slate-500">
                         <Droplets className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                        <p className="text-lg">אין תמונות שתייה</p>
+                        <p className="text-lg">אין נתוני שתייה</p>
                       </div>
                     )}
                   </div>

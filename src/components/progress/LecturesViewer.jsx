@@ -12,16 +12,32 @@ import { format, isPast, isFuture, parseISO } from 'date-fns';
 import { he } from 'date-fns/locale';
 import { motion } from 'framer-motion';
 
+// Extract YouTube video ID from various URL formats
+const getYouTubeVideoId = (url) => {
+  if (!url) return null;
+  const match = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|v\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : null;
+};
+
+const getYouTubeThumbnail = (url) => {
+  const videoId = getYouTubeVideoId(url);
+  return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
+};
+
+const isYouTubeUrl = (url) => url?.includes('youtube.com') || url?.includes('youtu.be');
+
 // Separate Video Player component for cleaner code
 const FullscreenVideoPlayer = ({ videoUrl, onClose }) => {
   const isGoogleDrive = videoUrl.includes('drive.google.com');
+  const isYouTube = isYouTubeUrl(videoUrl);
 
   const getEmbedUrl = (url) => {
     if (isGoogleDrive) {
-      // Transforms a standard Google Drive share link into an embeddable one.
-      // e.g., https://drive.google.com/file/d/FILE_ID/view?usp=sharing
-      // becomes https://drive.google.com/file/d/FILE_ID/preview
       return url.replace('/view?usp=sharing', '/preview').replace('/view', '/preview');
+    }
+    if (isYouTube) {
+      const videoId = getYouTubeVideoId(url);
+      return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1` : url;
     }
     return url;
   };
@@ -39,12 +55,12 @@ const FullscreenVideoPlayer = ({ videoUrl, onClose }) => {
           >
             <X className="w-8 h-8" />
           </button>
-          
-          {isGoogleDrive ? (
+
+          {isGoogleDrive || isYouTube ? (
             <iframe
               src={embedUrl}
               className="w-full h-full border-0"
-              allow="autoplay; fullscreen"
+              allow="autoplay; fullscreen; accelerometer; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               title="Lecture Video"
             ></iframe>
@@ -54,7 +70,7 @@ const FullscreenVideoPlayer = ({ videoUrl, onClose }) => {
               className="w-full h-full object-contain"
               controls
               autoPlay
-              onEnded={onClose} // Auto-close on video end, which also triggers view marking
+              onEnded={onClose}
             />
           )}
         </div>
@@ -225,12 +241,21 @@ export default function LecturesViewer() {
             >
               <Card className="muscle-glass border-0 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group">
                 <div className="relative">
-                  {lecture.thumbnail_url ? (
-                    <img 
-                      src={lecture.thumbnail_url} 
-                      alt={lecture.title}
-                      className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
+                  {(lecture.thumbnail_url || getYouTubeThumbnail(lecture.video_url)) ? (
+                    <>
+                      <img
+                        src={lecture.thumbnail_url || getYouTubeThumbnail(lecture.video_url)}
+                        alt={lecture.title}
+                        className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.parentElement.querySelector('[data-fallback]').style.display = 'flex';
+                        }}
+                      />
+                      <div data-fallback className="w-full h-48 bg-gradient-to-br from-purple-100 to-indigo-200 items-center justify-center" style={{ display: 'none' }}>
+                        <Video className="w-16 h-16 text-purple-600" />
+                      </div>
+                    </>
                   ) : (
                     <div className="w-full h-48 bg-gradient-to-br from-purple-100 to-indigo-200 flex items-center justify-center group-hover:from-purple-200 group-hover:to-indigo-300 transition-all duration-300">
                       <Video className="w-16 h-16 text-purple-600" />

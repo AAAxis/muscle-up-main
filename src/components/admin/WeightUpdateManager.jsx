@@ -124,6 +124,27 @@ const getMeasurementStatus = (type, value, userGender, userAge) => {
     }
 };
 
+// Auto-calculate physique rating from body fat % and muscle mass
+const calculatePhysiqueRating = (fatPercent, muscleMass, weight, gender) => {
+    if (!fatPercent || !muscleMass || !weight) return null;
+    const fat = parseFloat(fatPercent);
+    const muscle = parseFloat(muscleMass);
+    const w = parseFloat(weight);
+    if (!fat || !muscle || !w) return null;
+
+    const muscleRatio = muscle / w;
+    // Determine fat level
+    const isFemaleLowFat = gender === 'female' ? fat < 23 : fat < 15;
+    const isFemaleHighFat = gender === 'female' ? fat > 33 : fat > 25;
+    // Determine muscle level
+    const lowMuscle = muscleRatio < 0.33;
+    const highMuscle = muscleRatio > 0.40;
+
+    if (isFemaleLowFat) return lowMuscle ? 7 : highMuscle ? 9 : 8;
+    if (isFemaleHighFat) return lowMuscle ? 1 : highMuscle ? 3 : 2;
+    return lowMuscle ? 4 : highMuscle ? 6 : 5; // average fat
+};
+
 const calculateBMI = (weight, height) => {
     if (!weight || !height || parseFloat(height) <= 0) return null;
     // height is in meters, weight in kg
@@ -628,7 +649,11 @@ export default function WeightUpdateManager() {
                                             step="0.1"
                                             placeholder="75.5"
                                             value={measurementForm.weight}
-                                            onChange={(e) => setMeasurementForm({...measurementForm, weight: e.target.value})}
+                                            onChange={(e) => {
+                                                const newWeight = e.target.value;
+                                                const autoRating = calculatePhysiqueRating(measurementForm.fat_percentage, measurementForm.muscle_mass, newWeight, getUserGender());
+                                                setMeasurementForm({...measurementForm, weight: newWeight, ...(autoRating ? { physique_rating: String(autoRating) } : {})});
+                                            }}
                                             required
                                             name="weight"
                                             className="mt-1"
@@ -681,7 +706,11 @@ export default function WeightUpdateManager() {
                                             step="0.1"
                                             placeholder={getUserGender() === 'female' ? '21-33 (תקין)' : '8-20 (תקין)'}
                                             value={measurementForm.fat_percentage}
-                                            onChange={(e) => setMeasurementForm({...measurementForm, fat_percentage: e.target.value})}
+                                            onChange={(e) => {
+                                                const newFat = e.target.value;
+                                                const autoRating = calculatePhysiqueRating(newFat, measurementForm.muscle_mass, measurementForm.weight, getUserGender());
+                                                setMeasurementForm({...measurementForm, fat_percentage: newFat, ...(autoRating ? { physique_rating: String(autoRating) } : {})});
+                                            }}
                                             name="fat_percentage"
                                             className="mt-1"
                                         />
@@ -694,7 +723,11 @@ export default function WeightUpdateManager() {
                                             step="0.1"
                                             placeholder="45.2"
                                             value={measurementForm.muscle_mass}
-                                            onChange={(e) => setMeasurementForm({...measurementForm, muscle_mass: e.target.value})}
+                                            onChange={(e) => {
+                                                const newMuscle = e.target.value;
+                                                const autoRating = calculatePhysiqueRating(measurementForm.fat_percentage, newMuscle, measurementForm.weight, getUserGender());
+                                                setMeasurementForm({...measurementForm, muscle_mass: newMuscle, ...(autoRating ? { physique_rating: String(autoRating) } : {})});
+                                            }}
                                             name="muscle_mass"
                                             className="mt-1"
                                         />
