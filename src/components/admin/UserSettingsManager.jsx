@@ -177,6 +177,8 @@ export default function UserSettingsManager({
 
   const handleEditUser = (user) => {
     const userToEdit = { ...user };
+    // Sync role to is_admin so the checkbox reflects actual admin status (app uses role for access)
+    userToEdit.is_admin = userToEdit.role === 'admin' || userToEdit.role === 'coach' || !!userToEdit.is_admin;
     // Ensure 'name' is populated, using 'full_name' if 'name' is empty.
     if (!userToEdit.name && userToEdit.full_name) {
       userToEdit.name = userToEdit.full_name;
@@ -212,6 +214,13 @@ export default function UserSettingsManager({
         updateData.group_names = [updateData.group_names]; // Convert single string to array
       } else if (!updateData.group_names) {
         updateData.group_names = [];
+      }
+
+      // Sync is_admin checkbox to role so the user actually gets admin privileges (app checks role, not is_admin)
+      if (updateData.is_admin) {
+        updateData.role = 'admin';
+      } else {
+        updateData.role = 'trainee';
       }
 
       await User.update(editingUser.id, updateData);
@@ -576,7 +585,7 @@ export default function UserSettingsManager({
                         {/* Status Badges */}
                         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/80">
                           {getStatusBadge(user.status)}
-                          {user.is_admin && (
+                          {(user.is_admin || user.role === 'admin' || user.role === 'coach') && (
                               <Badge className="bg-purple-100 text-purple-800 border border-purple-200">
                                 <UserCog className="w-3 h-3 mr-1" />
                                 אדמין
