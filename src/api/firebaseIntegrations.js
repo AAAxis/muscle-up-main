@@ -57,8 +57,7 @@ export const SendEmail = async (emailData) => {
   throw new Error('SendEmail is no longer supported. Please use CoachNotification.create() for notifications.');
 };
 
-// Send FCM Push Notification to a specific user
-// FCM for Android; APNs for iOS (apns_token). No Expo.
+// Send FCM Push Notification — Firebase only. No Expo, no other methods.
 export const SendFCMNotification = async ({ userId, userEmail, title, body, data, imageUrl }) => {
   try {
     if (!title || !body) {
@@ -73,7 +72,6 @@ export const SendFCMNotification = async ({ userId, userEmail, title, body, data
     const { collection, query, where, getDocs, limit, doc, getDoc } = await import('firebase/firestore');
 
     let fcmTokens = [];
-    let apnsTokens = [];
 
     if (userId) {
       const tokensQuery = query(
@@ -86,19 +84,15 @@ export const SendFCMNotification = async ({ userId, userEmail, title, body, data
       if (!tokensSnapshot.empty) {
         tokensSnapshot.docs.forEach(d => {
           const t = d.data().token;
-          if (typeof t !== 'string' || t.startsWith('ExponentPushToken')) return;
-          if (/^[a-fA-F0-9]{64}$/.test(t)) apnsTokens.push(t);
-          else fcmTokens.push(t);
+          if (typeof t === 'string' && !t.startsWith('ExponentPushToken')) fcmTokens.push(t);
         });
       }
       const userRef = doc(db, 'users', userId);
       const userDoc = await getDoc(userRef);
       if (userDoc.exists()) {
         const u = userDoc.data();
-        if (u.apns_token && typeof u.apns_token === 'string') apnsTokens.push(u.apns_token);
         if (u.fcm_token && typeof u.fcm_token === 'string' && !u.fcm_token.startsWith('ExponentPushToken')) {
-          if (/^[a-fA-F0-9]{64}$/.test(u.fcm_token)) apnsTokens.push(u.fcm_token);
-          else fcmTokens.push(u.fcm_token);
+          fcmTokens.push(u.fcm_token);
         }
       }
     } else if (userEmail) {
@@ -111,10 +105,8 @@ export const SendFCMNotification = async ({ userId, userEmail, title, body, data
       if (!usersSnapshot.empty) {
         const userDoc = usersSnapshot.docs[0];
         const userData = userDoc.data();
-        if (userData.apns_token && typeof userData.apns_token === 'string') apnsTokens.push(userData.apns_token);
         if (userData.fcm_token && typeof userData.fcm_token === 'string' && !userData.fcm_token.startsWith('ExponentPushToken')) {
-          if (/^[a-fA-F0-9]{64}$/.test(userData.fcm_token)) apnsTokens.push(userData.fcm_token);
-          else fcmTokens.push(userData.fcm_token);
+          fcmTokens.push(userData.fcm_token);
         }
         const tokensQuery = query(
           collection(db, 'fcm_tokens'),
@@ -126,19 +118,15 @@ export const SendFCMNotification = async ({ userId, userEmail, title, body, data
         if (!tokensSnapshot.empty) {
           tokensSnapshot.docs.forEach(docSnap => {
             const t = docSnap.data().token;
-            if (typeof t === 'string' && !t.startsWith('ExponentPushToken')) {
-              if (/^[a-fA-F0-9]{64}$/.test(t)) apnsTokens.push(t);
-              else fcmTokens.push(t);
-            }
+            if (typeof t === 'string' && !t.startsWith('ExponentPushToken')) fcmTokens.push(t);
           });
         }
       }
     }
 
     fcmTokens = [...new Set(fcmTokens)];
-    apnsTokens = [...new Set(apnsTokens)];
 
-    if (fcmTokens.length === 0 && apnsTokens.length === 0) {
+    if (fcmTokens.length === 0) {
       throw new Error(`No push token found for user: ${userId || userEmail}`);
     }
 
@@ -150,7 +138,6 @@ export const SendFCMNotification = async ({ userId, userEmail, title, body, data
         title,
         body,
         tokens: fcmTokens,
-        apnsTokens,
         data: { ...(data || {}), sentFrom: 'dashboard' },
         imageUrl,
       }),
