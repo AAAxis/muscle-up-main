@@ -107,7 +107,8 @@ export async function POST(request) {
     }
 
     if (!admin.apps.length) {
-      console.error('❌ Firebase Admin SDK not initialized');
+      console.error('❌ [send-group-email] Firebase Admin SDK not initialized – emails will not be sent.');
+      console.error('   Set FIREBASE_PRIVATE_KEY + FIREBASE_CLIENT_EMAIL (or add muscule-up-924cedf05ad5.json) and restart the server.');
       return NextResponse.json(
         { error: 'Firebase Admin SDK not initialized' },
         { status: 500 }
@@ -153,6 +154,9 @@ export async function POST(request) {
     // Use Roamjet API to send emails
     const roamjetProjectId = process.env.ROAMJET_PROJECT_ID || 'eZl22S3z7Pl0oGA01qyH';
     const roamjetTemplateId = process.env.ROAMJET_TEMPLATE_ID || 'lbbVwGT1BLMw87C3oHbI';
+    if (!process.env.ROAMJET_PROJECT_ID || !process.env.ROAMJET_TEMPLATE_ID) {
+      console.warn('⚠️ [send-group-email] ROAMJET_PROJECT_ID or ROAMJET_TEMPLATE_ID not set – using defaults. Set them in .env.local for production.');
+    }
     
     const results = [];
     let successCount = 0;

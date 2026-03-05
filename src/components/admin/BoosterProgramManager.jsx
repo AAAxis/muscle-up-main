@@ -144,8 +144,14 @@ export default function BoosterProgramManager() {
                                 }),
                             });
 
-                            if (emailResponse.ok) {
+                            const emailData = emailResponse.ok ? await emailResponse.json().catch(() => ({})) : null;
+                            if (emailResponse.ok && emailData?.successCount > 0) {
                                 emailCount++;
+                            } else if (!emailResponse.ok) {
+                                const errBody = await emailResponse.json().catch(() => ({}));
+                                console.warn(`Email API error for ${user.email}:`, emailResponse.status, errBody);
+                            } else if (emailData?.successCount === 0) {
+                                console.warn(`Email not sent for ${user.email}:`, emailData?.failureCount ? 'send failed' : 'no users found', emailData);
                             }
                         } catch (emailError) {
                             console.warn(`Failed to send email to ${user.email}:`, emailError);
