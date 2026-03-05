@@ -751,6 +751,17 @@ function TrainerDetailScreen({ trainer, allUsers, isSystemAdmin, onBack, onEditT
             <div className="flex-1 min-w-0">
               <p className="text-xs text-slate-400 mb-0.5">ארגון</p>
               <p className="font-semibold text-slate-800 text-lg">{trainer.organization_name || 'לא הוגדר ארגון'}</p>
+              {(trainer.program_name || '').trim() ? (
+                <p className="text-sm text-slate-600 mt-1 flex items-center gap-1.5">
+                  <Rocket className="w-3.5 h-3.5 text-amber-500" />
+                  שם התוכנית באפליקציה: <span className="font-medium text-slate-800">{trainer.program_name}</span>
+                </p>
+              ) : (
+                <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
+                  <Rocket className="w-3.5 h-3.5 text-slate-300" />
+                  שם תוכנית לא הוגדר — לחץ ערוך להגדרה
+                </p>
+              )}
             </div>
           </div>
         </CardContent>
