@@ -651,6 +651,93 @@ exports.health = onRequest(async (req, res) => {
   });
 });
 
+// Send group email (or single user) via SMTP2Go – same as booster emails, runs on Firebase (no Vercel)
+exports.sendGroupEmail = onCall(async (request) => {
+  const { data, auth } = request;
+  if (!auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated to send group emails');
+  }
+  const { groupName, userEmail: targetUserEmail, title = 'הודעה מהמאמן', message = '' } = data || {};
+  if (!groupName && !targetUserEmail) {
+    throw new HttpsError('invalid-argument', 'Either group name or user email is required');
+  }
+  if (!title || !message) {
+    throw new HttpsError('invalid-argument', 'Title and message are required');
+  }
+  const apiKey = process.env.SMTP2GO_API_KEY;
+  const senderEmail = process.env.SMTP2GO_SENDER_EMAIL || 'rpochtman@simnetiq.store';
+  const senderName = process.env.SMTP2GO_SENDER_NAME || 'Vitrix App';
+  if (!apiKey) {
+    throw new HttpsError('failed-precondition', 'SMTP2GO_API_KEY is not configured');
+  }
+  const db = admin.firestore();
+  let usersSnapshot;
+  if (targetUserEmail) {
+    usersSnapshot = await db.collection('users').where('email', '==', targetUserEmail).limit(1).get();
+  } else {
+    usersSnapshot = await db.collection('users').where('group_names', 'array-contains', groupName).get();
+  }
+  if (usersSnapshot.empty) {
+    return {
+      success: true,
+      message: `No users found for ${targetUserEmail ? `user: ${targetUserEmail}` : `group: ${groupName}`}`,
+      successCount: 0,
+      failureCount: 0,
+      totalUsers: 0,
+      results: [],
+    };
+  }
+  const results = [];
+  let successCount = 0;
+  let failureCount = 0;
+  const sender = `${senderName} <${senderEmail}>`;
+  for (const userDoc of usersSnapshot.docs) {
+    const userData = userDoc.data();
+    const userEmail = userData.email;
+    const userName = userData.name || 'מתאמן/ת';
+    if (!userEmail) {
+      results.push({ userId: userDoc.id, email: null, name: userName, success: false, error: 'No email address' });
+      failureCount++;
+      continue;
+    }
+    try {
+      const emailText = `שלום ${userName},\n\n${message}`;
+      const htmlBody = emailText.replace(/\n/g, '<br>\n');
+      const smtpRes = await fetch('https://api.smtp2go.com/v3/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          api_key: apiKey,
+          to: [userEmail],
+          sender,
+          subject: title,
+          html_body: htmlBody,
+        }),
+      });
+      const emailRes = await smtpRes.json();
+      if (emailRes.data?.succeeded > 0) {
+        results.push({ userId: userDoc.id, email: userEmail, name: userName, success: true, messageId: 'sent' });
+        successCount++;
+      } else {
+        const err = emailRes.data?.failures?.[0] || emailRes.data?.error || 'Failed to send email';
+        results.push({ userId: userDoc.id, email: userEmail, name: userName, success: false, error: err });
+        failureCount++;
+      }
+    } catch (error) {
+      results.push({ userId: userDoc.id, email: userEmail, name: userName, success: false, error: error.message || 'Unknown error' });
+      failureCount++;
+    }
+  }
+  return {
+    success: true,
+    groupName: groupName || null,
+    totalUsers: usersSnapshot.size,
+    successCount,
+    failureCount,
+    results,
+  };
+});
+
 // Proxy ExerciseDB images/GIFs for web (avoids CORS). No auth required - only allows known ExerciseDB origins.
 const EXERCISE_MEDIA_ORIGINS = [
   'https://cdn.exercisedb.dev',

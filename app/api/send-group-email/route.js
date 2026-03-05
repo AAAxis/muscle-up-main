@@ -151,13 +151,15 @@ export async function POST(request) {
     const target = targetUserEmail ? `user: ${targetUserEmail}` : `group: ${groupName}`;
     console.log(`📊 Found ${usersSnapshot.size} users for ${target}`);
 
-    // Use Roamjet API to send emails
-    const roamjetProjectId = process.env.ROAMJET_PROJECT_ID || 'eZl22S3z7Pl0oGA01qyH';
-    const roamjetTemplateId = process.env.ROAMJET_TEMPLATE_ID || 'lbbVwGT1BLMw87C3oHbI';
-    if (!process.env.ROAMJET_PROJECT_ID || !process.env.ROAMJET_TEMPLATE_ID) {
-      console.warn('⚠️ [send-group-email] ROAMJET_PROJECT_ID or ROAMJET_TEMPLATE_ID not set – using defaults. Set them in .env.local for production.');
+    // Use SMTP2Go API to send emails (same as booster emails)
+    const apiKey = process.env.SMTP2GO_API_KEY;
+    const senderEmail = process.env.SMTP2GO_SENDER_EMAIL || 'rpochtman@simnetiq.store';
+    const senderName = process.env.SMTP2GO_SENDER_NAME || 'Vitrix App';
+    if (!apiKey) {
+      console.warn('⚠️ [send-group-email] SMTP2GO_API_KEY not set – emails will not be sent.');
     }
-    
+
+    const sender = `${senderName} <${senderEmail}>`;    
     const results = [];
     let successCount = 0;
     let failureCount = 0;
@@ -185,44 +187,55 @@ export async function POST(request) {
         // Build email message with personalized greeting
         const emailTitle = title;
         const emailText = `שלום ${userName},\n\n${message}`;
+        const htmlBody = emailText.replace(/\n/g, '<br>\n');
 
-        // Send email via Roamjet API
-        const roamjetUrl = new URL('https://smtp.roamjet.net/api/email/send');
-        roamjetUrl.searchParams.set('email', userEmail);
-        roamjetUrl.searchParams.set('project_id', roamjetProjectId);
-        roamjetUrl.searchParams.set('template_id', roamjetTemplateId);
-        roamjetUrl.searchParams.set('title', emailTitle);
-        roamjetUrl.searchParams.set('text', emailText);
+        if (!apiKey) {
+          results.push({
+            userId: userDoc.id,
+            email: userEmail,
+            name: userName,
+            success: false,
+            error: 'SMTP2GO not configured'
+          });
+          failureCount++;
+          continue;
+        }
 
         console.log(`📧 Sending email to: ${userEmail}`);
 
-        const roamjetRes = await fetch(roamjetUrl.toString(), {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+        const smtpRes = await fetch('https://api.smtp2go.com/v3/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            api_key: apiKey,
+            to: [userEmail],
+            sender,
+            subject: emailTitle,
+            html_body: htmlBody,
+          }),
         });
 
-        const emailRes = await roamjetRes.json();
+        const emailRes = await smtpRes.json();
 
-        if (roamjetRes.ok) {
+        if (emailRes.data?.succeeded > 0) {
           console.log(`✅ Email sent successfully to: ${userEmail}`);
           results.push({
             userId: userDoc.id,
             email: userEmail,
             name: userName,
             success: true,
-            messageId: emailRes.messageId || 'sent'
+            messageId: 'sent'
           });
           successCount++;
         } else {
-          console.error(`❌ Email send failed for ${userEmail}:`, emailRes);
+          const err = emailRes.data?.failures?.[0] || emailRes.data?.error || 'Failed to send email';
+          console.error(`❌ Email send failed for ${userEmail}:`, err);
           results.push({
             userId: userDoc.id,
             email: userEmail,
             name: userName,
             success: false,
-            error: emailRes.error || 'Failed to send email'
+            error: err
           });
           failureCount++;
         }

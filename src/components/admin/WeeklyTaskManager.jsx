@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { WeeklyTask, User, UserGroup, CoachNotification } from '@/api/entities';
 import { useAdminDashboard } from '@/contexts/AdminDashboardContext';
 import { groupsForStaff } from '@/lib/groupUtils';
-import { SendFCMNotification } from '@/api/integrations';
+import { SendFCMNotification, sendGroupEmail } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -507,19 +507,12 @@ export default function WeeklyTaskManager() {
 בהצלחה,
 צוות Vitrix`;
 
-                                const emailResponse = await fetch('/api/send-group-email', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                    },
-                                    body: JSON.stringify({
-                                        userEmail: user.email,
-                                        title: emailTitle,
-                                        message: emailMessage
-                                    }),
+                                const emailResult = await sendGroupEmail({
+                                    userEmail: user.email,
+                                    title: emailTitle,
+                                    message: emailMessage
                                 });
-
-                                if (emailResponse.ok) {
+                                if (emailResult && emailResult.success && emailResult.successCount > 0) {
                                     emailCount++;
                                 }
                             } catch (emailError) {

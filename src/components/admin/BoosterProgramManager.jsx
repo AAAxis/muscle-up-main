@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, WeeklyTask, MonthlyGoal, ProgressPicture, CalorieTracking, UserGroup, WaterTracking, LectureView, WeeklyTaskTemplate, CoachNotification } from '@/api/entities';
 import { useAdminDashboard } from '@/contexts/AdminDashboardContext';
 import { groupsForStaff } from '@/lib/groupUtils';
-import { SendFCMNotification } from '@/api/integrations';
+import { SendFCMNotification, sendGroupEmail } from '@/api/integrations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -132,26 +132,18 @@ export default function BoosterProgramManager() {
 בהצלחה,
 צוות Vitrix`;
 
-                            const emailResponse = await fetch('/api/send-group-email', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                    userEmail: user.email, // Send to single user
+                            const emailResponse = await sendGroupEmail({
+                                    userEmail: user.email,
                                     title: emailTitle,
-                                    message: emailMessage
-                                }),
-                            });
-
-                            const emailData = emailResponse.ok ? await emailResponse.json().catch(() => ({})) : null;
-                            if (emailResponse.ok && emailData?.successCount > 0) {
+                                    message: emailMessage,
+                                });
+                            const emailData = emailResponse || {};
+                            if (emailData.success && emailData.successCount > 0) {
                                 emailCount++;
-                            } else if (!emailResponse.ok) {
-                                const errBody = await emailResponse.json().catch(() => ({}));
-                                console.warn(`Email API error for ${user.email}:`, emailResponse.status, errBody);
-                            } else if (emailData?.successCount === 0) {
-                                console.warn(`Email not sent for ${user.email}:`, emailData?.failureCount ? 'send failed' : 'no users found', emailData);
+                            } else if (emailData.success === false && emailData.error) {
+                                console.warn(`Email API error for ${user.email}:`, emailData.error);
+                            } else if (emailData.successCount === 0) {
+                                console.warn(`Email not sent for ${user.email}:`, emailData.failureCount ? 'send failed' : 'no users found', emailData);
                             }
                         } catch (emailError) {
                             console.warn(`Failed to send email to ${user.email}:`, emailError);

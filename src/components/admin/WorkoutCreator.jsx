@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PreMadeWorkout, WorkoutTemplate, User, UserGroup, ExerciseDefinition, CoachNotification } from '@/api/entities';
 import { useAdminDashboard } from '@/contexts/AdminDashboardContext';
 import { groupsForStaff } from '@/lib/groupUtils';
-import { InvokeLLM } from '@/api/integrations'; // Added InvokeLLM
+import { InvokeLLM, sendGroupEmail } from '@/api/integrations'; // Added InvokeLLM
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -240,53 +240,35 @@ const ManualWorkoutBuilder = ({ templateToLoad, onTemplateLoaded, user, users, g
       try {
         if (isGroup) {
           // Send to group
-          const emailResponse = await fetch('/api/send-group-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              groupName: groupName,
-              title: subject,
-              message: messageBody
-            }),
+          const emailResult = await sendGroupEmail({
+            groupName: groupName,
+            title: subject,
+            message: messageBody
           });
-
-          if (emailResponse.ok) {
-            const emailResult = await emailResponse.json();
+          if (emailResult && emailResult.success) {
             emailCount = emailResult.successCount || 0;
             console.log(`✅ [WORKOUT] Sent ${emailCount} emails to group ${groupName}`);
           } else {
-            const errorData = await emailResponse.json();
-            emailError = errorData.error || 'שגיאה בשליחת אימיילים';
-            console.error('❌ [WORKOUT] Email API error:', errorData);
+            emailError = (emailResult && emailResult.error) || 'שגיאה בשליחת אימיילים';
+            console.error('❌ [WORKOUT] Email API error:', emailResult);
           }
         } else {
           // Send to individual users - PRIORITIZE EMAILS
           console.log(`📧 [WORKOUT] Sending emails to ${targetEmails.length} individual users`);
-          for (let i = 0; i < targetEmails.length; i++) {
+            for (let i = 0; i < targetEmails.length; i++) {
             const email = targetEmails[i];
             try {
               console.log(`📧 [WORKOUT] Sending email ${i + 1}/${targetEmails.length} to: ${email}`);
-              const emailResponse = await fetch('/api/send-group-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  userEmail: email,
-                  title: subject,
-                  message: messageBody
-                }),
+              const emailResult = await sendGroupEmail({
+                userEmail: email,
+                title: subject,
+                message: messageBody
               });
-
-              if (emailResponse.ok) {
-                const emailResult = await emailResponse.json();
-                if (emailResult.success && emailResult.successCount > 0) {
-                  emailCount++;
-                  console.log(`✅ [WORKOUT] Email sent successfully to: ${email}`);
-                } else {
-                  console.warn(`⚠️ [WORKOUT] Email API returned success=false for: ${email}`, emailResult);
-                }
-              } else {
-                const errorData = await emailResponse.json().catch(() => ({ error: 'Unknown error' }));
-                console.error(`❌ [WORKOUT] Email API error for ${email}:`, errorData);
+              if (emailResult && emailResult.success && emailResult.successCount > 0) {
+                emailCount++;
+                console.log(`✅ [WORKOUT] Email sent successfully to: ${email}`);
+              } else if (emailResult && !emailResult.success) {
+                console.warn(`⚠️ [WORKOUT] Email API returned success=false for: ${email}`, emailResult);
               }
             } catch (err) {
               console.error(`❌ [WORKOUT] Failed to send email to ${email}:`, err);

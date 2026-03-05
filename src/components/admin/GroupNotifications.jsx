@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserGroup, User } from '@/api/entities';
 import { useAdminDashboard } from '@/contexts/AdminDashboardContext';
-import { groupsForStaff } from '@/lib/groupUtils';
+import { sendGroupEmail } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -135,24 +135,16 @@ export default function GroupNotifications() {
     setFeedback({ type: '', message: '' });
 
     try {
-      const response = await fetch('/api/send-group-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          groupName: selectedGroup,
-          title: emailTitle,
-          message: emailMessage
-        }),
+      const result = await sendGroupEmail({
+        groupName: selectedGroup,
+        title: emailTitle,
+        message: emailMessage
       });
 
-      const result = await response.json();
-
-      if (response.ok && result.success) {
+      if (result && result.success) {
         setFeedback({
           type: 'success',
-          message: `האימייל נשלח בהצלחה! ${result.successCount} משתמשים קיבלו את האימייל.`
+          message: `האימייל נשלח בהצלחה! ${result.successCount || 0} משתמשים קיבלו את האימייל.`
         });
         // Reset form
         setEmailTitle('');
@@ -160,7 +152,7 @@ export default function GroupNotifications() {
       } else {
         setFeedback({
           type: 'error',
-          message: result.error || 'שגיאה בשליחת האימייל. נסה שוב.'
+          message: (result && result.error) || 'שגיאה בשליחת האימייל. נסה שוב.'
         });
       }
     } catch (error) {

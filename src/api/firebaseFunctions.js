@@ -89,6 +89,23 @@ export const exportBoosterPlusTaskTemplates = async () => {
   }
 };
 
+// Send Group Email (Firebase Cloud Function – no Vercel)
+export const sendGroupEmail = async ({ groupName, userEmail, title, message }) => {
+  try {
+    const sendGroupEmailFunction = httpsCallable(functions, 'sendGroupEmail');
+    const result = await sendGroupEmailFunction({ groupName, userEmail, title, message });
+    return result.data;
+  } catch (error) {
+    if (error.code === 'functions/not-found') {
+      throw new Error('sendGroupEmail function not found. Deploy Firebase Cloud Functions first.');
+    }
+    if (error.code === 'functions/unauthenticated') {
+      throw new Error('You must be logged in to send group emails.');
+    }
+    throw error;
+  }
+};
+
 // Send FCM Push Notification (requires Cloud Function)
 export const sendFCMNotification = async ({ userId, userEmail, title, body, data, imageUrl }) => {
   try {

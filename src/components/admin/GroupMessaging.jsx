@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { GroupMessage, User, UserGroup } from '@/api/entities';
 import { auth } from '@/api/firebaseConfig';
+import { sendGroupEmail } from '@/api/integrations';
 // SendEmail removed - using CoachNotification instead
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -289,38 +290,18 @@ export default function GroupMessaging({ groups }) {
             let notificationDetails = null;
             let emailDetails = null;
 
-            // Send emails FIRST via Roamjet API to all users in the group
+            // Send emails FIRST via Firebase Cloud Function (SMTP2Go) to all users in the group
             try {
                 console.log('📧 [FRONTEND] Starting to send emails to group:', selectedGroup);
-                const emailResponse = await fetch('/api/send-group-email', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        groupName: selectedGroup,
-                        title: messageTitle,
-                        message: messageContent
-                    }),
+                const emailResult = await sendGroupEmail({
+                    groupName: selectedGroup,
+                    title: messageTitle,
+                    message: messageContent
                 });
 
-                console.log('📧 [FRONTEND] Email API response status:', emailResponse.status);
-                
-                if (!emailResponse.ok) {
-                    let errorText;
-                    try {
-                        errorText = await emailResponse.text();
-                    } catch (e) {
-                        errorText = 'Could not read error response';
-                    }
-                    console.error('❌ [FRONTEND] Email API HTTP error:', emailResponse.status, errorText);
-                    throw new Error(`HTTP ${emailResponse.status}: ${errorText}`);
-                }
-
-                const emailResult = await emailResponse.json();
                 console.log('📧 [FRONTEND] Email API response data:', emailResult);
 
-                if (emailResult.success) {
+                if (emailResult && emailResult.success) {
                     emailCount = emailResult.successCount || 0;
                     emailDetails = emailResult;
                     console.log(`✅ [FRONTEND] Successfully sent ${emailCount} emails to group ${selectedGroup}`);
@@ -331,7 +312,7 @@ export default function GroupMessaging({ groups }) {
                         emailError = `לא נשלחו אימיילים (${emailResult.totalUsers} משתמשים בקבוצה)`;
                     }
                 } else {
-                    emailError = emailResult.error || 'שגיאה בשליחת אימיילים';
+                    emailError = (emailResult && emailResult.error) || 'שגיאה בשליחת אימיילים';
                     console.error('❌ [FRONTEND] Email API returned success=false:', emailResult);
                 }
             } catch (error) {

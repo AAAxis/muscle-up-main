@@ -11,6 +11,8 @@ export {
   UploadPrivateFile
 } from './firebaseIntegrations';
 
+export { sendGroupEmail } from './firebaseFunctions';
+
 
 
 

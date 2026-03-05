@@ -294,14 +294,14 @@ export default async function handler(req, res) {
       success: response.success
     });
 
-    // Send emails via Roamjet API to all users who received the notification
-    // Hardcoded fallback values for projectId and templateId
-    const roamjetProjectId = projectId || process.env.ROAMJET_PROJECT_ID || 'eZl22S3z7Pl0oGA01qyH';
-    const roamjetTemplateId = templateId || process.env.ROAMJET_TEMPLATE_ID || 'lbbVwGT1BLMw87C3oHbI';
+    // Send emails via SMTP2Go to all users who received the notification
+    const apiKey = process.env.SMTP2GO_API_KEY;
+    const senderEmail = process.env.SMTP2GO_SENDER_EMAIL || 'rpochtman@simnetiq.store';
+    const senderName = process.env.SMTP2GO_SENDER_NAME || 'Vitrix App';
 
     let emailResults = [];
 
-    if (roamjetProjectId && roamjetTemplateId && admin.apps.length) {
+    if (apiKey && admin.apps.length) {
       try {
         console.log('📧 Fetching user emails for email notifications...');
         const db = admin.firestore();
@@ -377,40 +377,41 @@ export default async function handler(req, res) {
         // Remove duplicates
         const uniqueEmails = [...new Set(userEmails)];
 
-        console.log(`📧 Sending emails to ${uniqueEmails.length} users via Roamjet API...`);
+        console.log(`📧 Sending emails to ${uniqueEmails.length} users via SMTP2Go...`);
 
         // Send email to each user
+        const sender = `${senderName} <${senderEmail}>`;
         for (const userEmail of uniqueEmails) {
           try {
-            const roamjetUrl = new URL('https://smtp.roamjet.net/api/email/send');
-            roamjetUrl.searchParams.set('email', userEmail);
-            roamjetUrl.searchParams.set('project_id', roamjetProjectId);
-            roamjetUrl.searchParams.set('template_id', roamjetTemplateId);
-            roamjetUrl.searchParams.set('title', title);
-            roamjetUrl.searchParams.set('text', messageBody);
-
-            const roamjetRes = await fetch(roamjetUrl.toString(), {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json',
-              },
+            const htmlBody = messageBody.replace(/\n/g, '<br>\n');
+            const smtpRes = await fetch('https://api.smtp2go.com/v3/email/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                api_key: apiKey,
+                to: [userEmail],
+                sender,
+                subject: title,
+                html_body: htmlBody,
+              }),
             });
 
-            const emailRes = await roamjetRes.json();
+            const emailRes = await smtpRes.json();
 
-            if (roamjetRes.ok) {
+            if (emailRes.data?.succeeded > 0) {
               console.log(`✅ Email sent to ${userEmail}:`, emailRes);
               emailResults.push({
                 email: userEmail,
                 success: true,
-                messageId: emailRes.messageId
+                messageId: 'sent'
               });
             } else {
-              console.error(`❌ Email send failed for ${userEmail}:`, emailRes);
+              const err = emailRes.data?.failures?.[0] || emailRes.data?.error || 'Unknown error';
+              console.error(`❌ Email send failed for ${userEmail}:`, err);
               emailResults.push({
                 email: userEmail,
                 success: false,
-                error: emailRes.error || 'Unknown error'
+                error: err
               });
             }
           } catch (emailError) {
@@ -429,7 +430,7 @@ export default async function handler(req, res) {
         // Don't fail the entire request if email fails
       }
     } else {
-      console.log('⚠️ Roamjet email not sent: missing projectId or templateId, or Firebase Admin not initialized');
+      console.log('⚠️ SMTP2Go email not sent: SMTP2GO_API_KEY not set or Firebase Admin not initialized');
     }
 
     res.status(200).json({
