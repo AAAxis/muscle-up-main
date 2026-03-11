@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { WeightEntry, CalorieTracking, WaterTracking, ProgressPicture, Workout, CoachMenu, CoachMessage } from '@/api/entities';
+import { SendFCMNotification } from '@/api/integrations';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -387,6 +388,17 @@ export default function UserTrackingTab({ user, showUserHeader = true }) {
         message_text: feedbackMessage.trim(),
         is_read: false,
       });
+
+      try {
+        await SendFCMNotification({
+          userEmail: user.email,
+          title: 'משוב מהמאמן',
+          body: feedbackMessage.trim().slice(0, 80) + (feedbackMessage.trim().length > 80 ? '...' : ''),
+          data: { type: 'coach_message', user_email: user.email },
+        });
+      } catch (fcmErr) {
+        console.warn('FCM push failed for', user.email, fcmErr);
+      }
 
       toast({
         title: "הצלחה",

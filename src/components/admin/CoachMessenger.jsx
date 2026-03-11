@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, CoachMessage, UserGroup } from '@/api/entities';
+import { SendFCMNotification } from '@/api/integrations';
 import { useAdminDashboard } from '@/contexts/AdminDashboardContext';
 import { groupsForStaff } from '@/lib/groupUtils';
 import { Button } from '@/components/ui/button';
@@ -107,6 +108,21 @@ export default function CoachMessenger() {
                 setStatus(`ההודעה נשלחה ל-${successCount} מתאמנים. ${failureCount} שליחות נכשלו.`);
             } else {
                 throw new Error('כל השליחות נכשלו');
+            }
+
+            // Send push notifications to mobile app for each recipient
+            const shortText = messageText.trim().length > 80 ? messageText.trim().slice(0, 77) + '...' : messageText.trim();
+            for (const email of targetEmails) {
+                try {
+                    await SendFCMNotification({
+                        userEmail: email,
+                        title: 'הודעה מהמאמן',
+                        body: shortText,
+                        data: { type: 'coach_message', user_email: email },
+                    });
+                } catch (fcmErr) {
+                    console.warn('FCM push failed for', email, fcmErr);
+                }
             }
 
             setMessageText('');

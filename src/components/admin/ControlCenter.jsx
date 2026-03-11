@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, UserGroup, WeeklyTask, BoosterPlusTask, MonthlyGoal, GeneratedReport, CoachMessage, WeightEntry, PreMadeWorkout, AdminMessage } from '@/api/entities';
+import { SendFCMNotification } from '@/api/integrations';
 import { GroupEvent } from '@/api/entities';
 import { useAdminDashboard } from '@/contexts/AdminDashboardContext';
 import { groupsForStaff } from '@/lib/groupUtils';
@@ -257,6 +258,26 @@ export default function ControlCenter({ onNavigateToTab }) {
             messageData.read_receipts = readReceipts;
 
             await AdminMessage.create(messageData);
+
+            // Send push notifications to mobile app for each recipient
+            const title = messageData.message_title || 'הודעה מהמנהל';
+            const shortBody = (messageData.message_content || '').length > 80
+                ? messageData.message_content.slice(0, 77) + '...'
+                : (messageData.message_content || '');
+            for (const receipt of readReceipts) {
+                const email = receipt.user_email;
+                if (!email) continue;
+                try {
+                    await SendFCMNotification({
+                        userEmail: email,
+                        title,
+                        body: shortBody,
+                        data: { type: 'admin_message', user_email: email },
+                    });
+                } catch (fcmErr) {
+                    console.warn('FCM push failed for', email, fcmErr);
+                }
+            }
 
             setSendSuccess('ההודעה נשלחה בהצלחה!');
             setMessageContent('');
