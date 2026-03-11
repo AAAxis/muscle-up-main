@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User } from '@/api/entities';
 import { useAdminDashboard } from '@/contexts/AdminDashboardContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Key, User as UserIcon, UserMinus, UserPlus, Loader2, Search, Mail } from 'lucide-react';
+import { Key, User as UserIcon, UserMinus, UserPlus, Loader2, Search, Mail, Pencil, Camera } from 'lucide-react';
+import { UploadFile } from '@/api/integrations';
 
 export default function AdminList({ canAccess }) {
   const { isSystemAdmin } = useAdminDashboard();
@@ -24,6 +26,12 @@ export default function AdminList({ canAccess }) {
   const [addDialogUsers, setAddDialogUsers] = useState([]);
   const [isLoadingAddUsers, setIsLoadingAddUsers] = useState(false);
   const [promotingId, setPromotingId] = useState(null);
+
+  const [editingAdmin, setEditingAdmin] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const editPhotoInputRef = useRef(null);
 
   const loadAdmins = useCallback(async () => {
     if (!canLoad) return;
@@ -135,6 +143,58 @@ export default function AdminList({ canAccess }) {
     }
   };
 
+  const openEditDialog = (admin) => {
+    setEditingAdmin(admin);
+    setEditName(admin.name || admin.full_name || '');
+    setError('');
+    setMessage('');
+  };
+
+  const handleEditPhoto = async (e) => {
+    const file = e.target?.files?.[0];
+    if (!file || !editingAdmin) return;
+    if (!file.type.startsWith('image/')) return;
+    const uid = editingAdmin.uid || editingAdmin.id;
+    if (!uid) return;
+    setIsUploadingPhoto(true);
+    setError('');
+    try {
+      const { file_url } = await UploadFile({ file });
+      await User.update(uid, { profile_image_url: file_url });
+      setEditingAdmin((prev) => (prev ? { ...prev, profile_image_url: file_url } : null));
+      setUsers((prev) => prev.map((u) => (u.uid || u.id) === uid ? { ...u, profile_image_url: file_url } : u));
+      setFiltered((prev) => prev.map((u) => (u.uid || u.id) === uid ? { ...u, profile_image_url: file_url } : u));
+      setMessage('תמונת הפרופיל עודכנה.');
+    } catch (err) {
+      console.error('Failed to upload admin photo:', err);
+      setError('שגיאה בהעלאת התמונה');
+    } finally {
+      setIsUploadingPhoto(false);
+      if (editPhotoInputRef.current) editPhotoInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingAdmin) return;
+    const uid = editingAdmin.uid || editingAdmin.id;
+    if (!uid) return;
+    setIsSavingEdit(true);
+    setError('');
+    try {
+      await User.update(uid, { name: editName.trim() || undefined, full_name: editName.trim() || undefined });
+      setMessage('שם המנהל עודכן.');
+      setUsers((prev) => prev.map((u) => (u.uid || u.id) === uid ? { ...u, name: editName.trim(), full_name: editName.trim() } : u));
+      setFiltered((prev) => prev.map((u) => (u.uid || u.id) === uid ? { ...u, name: editName.trim(), full_name: editName.trim() } : u));
+      setEditingAdmin((prev) => (prev ? { ...prev, name: editName.trim(), full_name: editName.trim() } : null));
+      setTimeout(() => setEditingAdmin(null), 300);
+    } catch (err) {
+      console.error('Failed to update admin name:', err);
+      setError('שגיאה בעדכון השם');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   if (!canLoad) {
     return (
       <div className="text-center py-12 text-slate-500">
@@ -227,20 +287,17 @@ export default function AdminList({ canAccess }) {
                       </p>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-amber-700 border-amber-300 hover:bg-amber-50"
-                    onClick={() => handleDowngrade(admin)}
-                    disabled={downgradingId === (admin.uid || admin.id)}
-                  >
-                    {downgradingId === (admin.uid || admin.id) ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin ms-1" />
-                    ) : (
-                      <UserMinus className="w-3.5 h-3.5 ms-1" />
-                    )}
-                    הסר תפקיד
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-slate-700 border-slate-300 hover:bg-slate-50"
+                      onClick={() => openEditDialog(admin)}
+                    >
+                      <Pencil className="w-3.5 h-3.5 ms-1" />
+                      ערוך
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -318,6 +375,105 @@ export default function AdminList({ canAccess }) {
               </div>
             </ScrollArea>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingAdmin} onOpenChange={(open) => !open && setEditingAdmin(null)}>
+        <DialogContent className="max-w-md" dir="rtl">
+          <DialogHeader className="text-right ps-8">
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-amber-600" />
+              עריכת מנהל
+            </DialogTitle>
+            <DialogDescription>עדכן שם ותמונת פרופיל</DialogDescription>
+          </DialogHeader>
+          {editingAdmin && (
+            <div className="space-y-4 py-2">
+              <div className="flex flex-col items-center gap-3">
+                <Label className="text-sm font-medium text-slate-700">תמונת פרופיל</Label>
+                <div className="relative">
+                  {editingAdmin.profile_image_url ? (
+                    <img
+                      src={editingAdmin.profile_image_url}
+                      alt=""
+                      className="w-20 h-20 rounded-full object-cover border-2 border-amber-200"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center border-2 border-amber-200">
+                      <UserIcon className="w-10 h-10 text-amber-600" />
+                    </div>
+                  )}
+                  <input
+                    ref={editPhotoInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleEditPhoto}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="absolute -bottom-1 -start-1 rounded-full w-8 h-8 border-amber-300 bg-white hover:bg-amber-50"
+                    onClick={() => editPhotoInputRef.current?.click()}
+                    disabled={isUploadingPhoto}
+                  >
+                    {isUploadingPhoto ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                    ) : (
+                      <Camera className="w-4 h-4 text-amber-600" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500">לחץ על המצלמה להחלפת תמונה</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-admin-name">שם</Label>
+                <Input
+                  id="edit-admin-name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="שם המנהל"
+                  className="text-end"
+                />
+              </div>
+              <p className="text-xs text-slate-500">{editingAdmin.email}</p>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0 flex-row-reverse">
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (editingAdmin) {
+                  handleDowngrade(editingAdmin);
+                  setEditingAdmin(null);
+                }
+              }}
+              disabled={isSavingEdit || !editingAdmin || downgradingId === (editingAdmin?.uid || editingAdmin?.id)}
+            >
+              {downgradingId === (editingAdmin?.uid || editingAdmin?.id) ? (
+                <Loader2 className="w-4 h-4 animate-spin ms-2" />
+              ) : (
+                <UserMinus className="w-4 h-4 ms-2" />
+              )}
+              הסר מתפקיד מנהל
+            </Button>
+            <Button variant="outline" onClick={() => setEditingAdmin(null)} disabled={isSavingEdit}>
+              ביטול
+            </Button>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={handleSaveEdit}
+              disabled={isSavingEdit || !editingAdmin}
+            >
+              {isSavingEdit ? (
+                <Loader2 className="w-4 h-4 animate-spin ms-2" />
+              ) : (
+                <Pencil className="w-4 h-4 ms-2" />
+              )}
+              שמור שינויים
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

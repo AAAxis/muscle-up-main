@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { WeeklyTask, User, UserGroup, CoachNotification } from '@/api/entities';
+import { WeeklyTask, User, UserGroup, CoachNotification, WeeklyTaskTemplate } from '@/api/entities';
 import { useAdminDashboard } from '@/contexts/AdminDashboardContext';
 import { groupsForStaff } from '@/lib/groupUtils';
 import { SendFCMNotification, sendGroupEmail } from '@/api/integrations';
@@ -71,185 +71,12 @@ import { format, addDays, parseISO, addWeeks, startOfWeek, endOfWeek } from 'dat
 import { he } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const predefinedTasksMale = [
-    {
-        week: 1,
-        title: "שבוע פתיחת בוסטר",
-        mission_text: "לשתות 2–3 ליטר מים ביום.",
-        tip_text: "הפעל תזכורת כל שעתיים.\nהשתמש באפליקציה למדידת צריכת מים.\nמים תומכים בתחושת שובע, משפרים חילוף חומרים, מנקים את הגוף ומקדמים ירידה במשקל.",
-        booster_text: "המים הם הכלי הפשוט והעוצמתי ביותר ליצירת תנועה קדימה."
-    },
-    {
-        week: 2,
-        title: "מיישרים קו עם הצלחת",
-        mission_text: "לצלם את כל הארוחות במשך שבוע ולהעלות לאפליקציה.",
-        tip_text: "צילום הארוחות מעלה מודעות ומחדד בחירות – בלי שיפוטיות ובלי ביקורת. הוא מאפשר לראות איך נראה יום שלם, לזהות הרגלים חוזרים (כמו חטיפים בלילה או דילוג על ארוחה), ולהבין איפה אפשר לדייק.",
-        booster_text: "הצילומים הם לא רק מעקב – הם מראה שמאפשרת למידה אמיתית ושינוי לאורך זמן."
-    },
-    {
-        week: 3,
-        title: "לזהות את הפיתוי ולבחור אחרת",
-        mission_text: "בכל יום לזהות פיתוי אחד, ולרשום לפני השינה:\n- מה עורר אותו?\n- איך יכולתי או אוכל להתמודד איתו אחרת?",
-        tip_text: "פיתוי הוא לא תמיד רעב, הוא לעיתים ביטוי לרגש, לשעמום או להרגל. ברגע שמזהים אותו, נוצרת הזדמנות לעצור, לבחור אחרת ולחזק שליטה פנימית.",
-        booster_text: "מי המנהל – אתה או הפיתוי?\nעד עכשיו הפיתויים הובילו אותך, אבל השבוע אתה מתחיל להפוך את הכיוון ולשים את השליטה בחזרה בידיים שלך."
-    },
-    {
-        week: 4,
-        title: "לבחור בעצמך גם מחוץ לאוכל",
-        mission_text: "לתכנן השבוע לפחות רגע אחד שמיועד רק לך – לא קשור לאוכל או לספורט.\n(זה יכול להיות מסאז', מקלחת שקטה, ציור, הליכה לבד, או אפילו פסק זמן בלי הטלפון).",
-        tip_text: "זמן איכות אישי מחזק את הערך העצמי ומקטין את הצורך בחיזוקים מבחוץ.",
-        booster_text: "אוכל הוא רק תופעת לוואי של מה שקורה בתוכנו. כשאנחנו דואגים לעצמנו ומראים לתת־מודע שאנחנו באמת חשובים, זה מתבטא גם בתזונה שלנו."
-    },
-    {
-        week: 5,
-        title: "לפעול קודם, להרגיש אחר כך",
-        mission_text: "בכל בוקר, מיד אחרי שאתה מתעורר, רשום:\n- כוונה ליום הזה (איך אתה רוצה להרגיש ומה חשוב לך להשיג).\n- רשום 3 פעולות קטנות שיקדמו אותך באותו היום ובצע לפחות 2 מהן.",
-        tip_text: "כשאנחנו שמים מיקוד במה שאנחנו רוצים, התת־מודע כבר מתחיל לעבוד כדי לעזור לנו להשיג את זה.",
-        booster_text: "מוטיבציה לא מובילה לתוצאות - התוצאות הן אלו שמייצרות מוטיבציה."
-    },
-    {
-        week: 6,
-        title: "ידע הוא כוח, תרתי משמע",
-        mission_text: "להוסיף עוד אימון כוח השבוע ולנסות לעלות עומס אפילו בקילוגרם אחד.",
-        tip_text: "- שריר שורף יותר שומן גם במנוחה\n- אימוני כוח תומכים בירידה שקטה ויציבה\n- שריר זה לא גודל, זה חוסן מטבולי",
-        booster_text: "הגוף שלך לא רק משתנה, הוא נבנה מחדש, חזק מבפנים."
-    },
-    {
-        week: 7,
-        title: "להוריד סטרס, להעלות תוצאה",
-        mission_text: "כל יום – 5 דקות של נשימה מודעת או מדיטציה מודרכת.",
-        tip_text: "סטרס מעכב ירידה במשקל. רוגע הוא חלק בלתי נפרד מהתהליך.",
-        booster_text: "כשהנפש משתחררת – גם הגוף מאפשר."
-    },
-    {
-        week: 8,
-        title: "שינוי מתחיל בבחירה אחת",
-        mission_text: "במשך סוף השבוע הקרוב (חמישי–שישי–שבת) לצלם את כל הארוחות ולהעלות לאפליקציה. זו נקודת 'איפוס' חשובה לבדוק את עצמנו דווקא בימים המאתגרים יותר, לראות את התמונה המלאה, ולוודא שאנחנו בכיוון לעבר המטרה.",
-        tip_text: "הצילום לא נועד לשיפוט אלא למודעות. הוא עוזר לזהות הרגלים שחוזרים, להבין את דפוסי סוף השבוע ולמצוא איפה אפשר לדייק.",
-        booster_text: "לא משחזרים את הישן – יוצרים מציאות חדשה, צעד אחרי צעד."
-    },
-    {
-        week: 9,
-        title: "לאהוב אותנו",
-        mission_text: "לדבר בשפה חיובית כלפיי עצמך והגוף שלך.",
-        tip_text: "כשאנחנו מדברים אל עצמנו בצורה חיובית אנחנו בעצם מחזירים לעצמנו אהבה! וזה חלק לא פחות חשוב מהצלחת התהליך; לא רק לרדת במשקל, אלא גם לאהוב את עצמנו על הדרך המדהימה שאנחנו בוחרים לעשות.",
-        booster_text: "ההתנהגות שלך מקדימה את התחושה; היא זו שבונה את הזהות."
-    },
-    {
-        week: 10,
-        title: "לשנות את הדיבור הפנימי",
-        mission_text: "לכתוב משפט מחזק אחד, ולהחליף את שומר המסך למשפט הזה. לקרוא אותו 3 פעמים ביום בקול.",
-        tip_text: "השפה הפנימית היא הדלק של התודעה – תבחר אותה בחכמה.",
-        booster_text: "תדבר לעצמך כמו שאתה רוצה להרגיש."
-    },
-    {
-        week: 11,
-        title: "החלקים מתחברים",
-        mission_text: "כל ערב לסכם:\n- מה עבד היום?\n- מה למדתי השבוע על עצמי?",
-        tip_text: "עצירה לרגע של הכרה = תחושת הישג אמיתית ומיקוד ליום הבא!",
-        booster_text: "תסתכל אחורה – רק כדי להבין כמה התקדמת."
-    },
-    {
-        week: 12,
-        title: "הזהות החדשה יוצאת לאור",
-        mission_text: "לכתוב מכתב לעצמך הישן. מכתב שמספר על מה שאתה הפכת להיות היום, ולסיים את המכתב בתודה ל'אני הישן' שלך שהיה מוכן לצאת לדרך הזו.",
-        tip_text: "הזהות החדשה שלך לא באה מבחוץ; היא נבנתה צעד־צעד, מתוך בחירה, ומעכשיו והלאה אתה הבוס של עצמך!",
-        booster_text: "אתה הבנת, אתה עשית, אתה הצלחת.\nזאת לא גרסה חדשה, זאת הגרסה האמיתית שלך, שנולדה מתוך עשייה."
-    }
-];
-
-const predefinedTasksFemale = [
-    {
-        week: 1,
-        title: "שבוע פתיחת בוסטר",
-        mission_text: "לשתות 2–3 ליטר מים ביום.",
-        tip_text: "הפעילי תזכורת כל שעתיים.\nהשתמשי באפליקציה למדידת צריכת מים.\nמים תומכים בתחושת שובע, משפרים חילוף חומרים, מנקים את הגוף ומקדמים ירידה במשקל.",
-        booster_text: "המים הם הכלי הפשוט והעוצמתי ביותר ליצירת תנועה קדימה."
-    },
-    {
-        week: 2,
-        title: "מיישרים קו עם הצלחת",
-        mission_text: "לצלם את כל הארוחות במשך שבוע ולהעלות לאפליקציה.",
-        tip_text: "צילום הארוחות מעלה מודעות ומחדד בחירות – בלי שיפוטיות ובלי ביקורת. הוא מאפשר לראות איך נראה יום שלם, לזהות הרגלים חוזרים (כמו חטיפים בלילה או דילוג על ארוחה), ולהבין איפה אפשר לדייק.",
-        booster_text: "הצילומים הם לא רק מעקב – הם מראה שמאפשרת למידה אמיתית ושינוי לאורך זמן."
-    },
-    {
-        week: 3,
-        title: "לזהות את הפיתוי ולבחור אחרת",
-        mission_text: "בכל יום לזהות פיתוי אחד, ולרשום לפני השינה:\n- מה עורר אותו?\n- איך יכולתי או אוכל להתמודד איתו אחרת?",
-        tip_text: "פיתוי הוא לא תמיד רעב, הוא לעיתים ביטוי לרגש, לשעמום או להרגל. ברגע שמזהים אותו, נוצרת הזדמנות לעצור, לבחור אחרת ולחזק שליטה פנימית.",
-        booster_text: "מי המנהלת – את או הפיתוי?\nעד עכשיו הפיתויים הובילו אותך, אבל השבוע את מתחילה להפוך את הכיוון ולשים את השליטה בחזרה בידיים שלך."
-    },
-    {
-        week: 4,
-        title: "לבחור בעצמך גם מחוץ לאוכל",
-        mission_text: "לתכנן השבוע לפחות רגע אחד שמיועד רק לך – לא קשור לאוכל או לספורט.\n(זה יכול להיות מסאז', מקלחת שקטה, ציור, הליכה לבד, או אפילו פסק זמן בלי הטלפון).",
-        tip_text: "זמן איטיות אישי מחזק את הערך העצמי ומקטין את הצורך בחיזוקים מבחוץ.",
-        booster_text: "אוכל הוא רק תופעת לוואי של מה שקורה בתוכנו. כשאנחנו דואגות לעצמנו ומראות לתת־מודע שאנחנו באמת חשובות, זה מתבטא גם בתזונה שלנו."
-    },
-    {
-        week: 5,
-        title: "לפעול קודם, להרגיש אחר כך",
-        mission_text: "בכל בוקר, מיד אחרי שאת מתעוררת, רשמי:\n- כוונה ליום הזה (איך את רוצה להרגיש ומה חשוב לך להשיג).\n- רשמי 3 פעולות קטנות שיקדמו אותך באותו היום ובצעי לפחות 2 מהן.",
-        tip_text: "כשאנחנו שמות מיקוד במה שאנחנו רוצות, התת־מודע כבר מתחיל לעבוד כדי לעזור לנו להשיג את זה.",
-        booster_text: "מוטיבציה לא מובילה לתוצאות - התוצאות הן אלו שמייצרות מוטיבציה."
-    },
-    {
-        week: 6,
-        title: "ידע הוא כוח, תרתי משמע",
-        mission_text: "להוסיף עוד אימון כוח השבוע ולנסות לעלות עומס אפילו בקילוגרם אחד.",
-        tip_text: "- שריר שורף יותר שומן גם במנוחה\n- אימוני כוח תומכים בירידה שקטה ויציבה\n- שריר זה לא גודל, זה חוסן מטבולי",
-        booster_text: "הגוף שלך לא רק משתנה, הוא נבנה מחדש, חזק מבפנים."
-    },
-    {
-        week: 7,
-        title: "להוריד סטרס, להעלות תוצאה",
-        mission_text: "כל יום – 5 דקות של נשימה מודעת או מדיטציה מודרכת.",
-        tip_text: "סטרס מעכב ירידה במשקל. רוגע הוא חלק בלתי נפרד מהתהליך.",
-        booster_text: "כשהנפש משתחררת – גם הגוף מאפשר."
-    },
-    {
-        week: 8,
-        title: "שינוי מתחיל בבחירה אחת",
-        mission_text: "במשך סוף השבוע הקרוב (חמישי–שישי–שבת) לצלם את כל הארוחות ולהעלות לאפליקציה. זו נקודת 'איפוס' חשובה לבדוק את עצמנו דווקא בימים המאתגרים יותר, לראות את התמונה המלאה, ולוודא שאנחנו בכיוון לעבר המטרה.",
-        tip_text: "הצילום לא נועד לשיפוט אלא למודעות. הוא עוזר לזהות הרגלים שחוזרים, להבין את דפוסי סוף השבוע ולמצוא איפה אפשר לדייק.",
-        booster_text: "לא משחזרים את הישן – יוצרים מציאות חדשה, צעד אחרי צעד."
-    },
-    {
-        week: 9,
-        title: "לאהוב אותנו",
-        mission_text: "לדבר בשפה חיובית כלפיי עצמך והגוף שלך.",
-        tip_text: "כשאנחנו מדברות אל עצמנו בצורה חיובית אנחנו בעצם מחזירות לעצמנו אהבה! וזה חלק לא פחות חשוב מהצלחת התהליך; לא רק לרדת במשקל, אלא גם לאהוב את עצמנו על הדרך המדהימה שאנחנו בוחרות לעשות.",
-        booster_text: "ההתנהגות שלך מקדימה את התחושה; היא זו שבונה את הזהות."
-    },
-    {
-        week: 10,
-        title: "לשנות את הדיבור הפנימי",
-        mission_text: "לכתוב משפט מחזק אחד, ולהחליף את שומר המסך למשפט הזה. לקרוא אותו 3 פעמים ביום בקול.",
-        tip_text: "השפה הפנימית היא הדלק של התודעה – תבחרי אותה בחכמה.",
-        booster_text: "תדברי לעצמך כמו שאת רוצה להרגיש."
-    },
-    {
-        week: 11,
-        title: "החלקים מתחברים",
-        mission_text: "כל ערב לסכם:\n- מה עבד היום?\n- מה למדתי השבוע על עצמי?",
-        tip_text: "עצירה לרגע של הכרה = תחושת הישג אמיתית ומיקוד ליום הבא!",
-        booster_text: "תסתכלי אחורה – רק כדי להבין כמה התקדמת."
-    },
-    {
-        week: 12,
-        title: "הזהות החדשה יוצאת לאור",
-        mission_text: "לכתוב מכתב לעצמך הישן. מכתב שמספר על מה שאת הפכת להיות היום, ולסיים את המכתב בתודה ל'אני הישן' שלך שהיה מוכן לצאת לדרך הזו.",
-        tip_text: "הזהות החדשה שלך לא באה מבחוץ; היא נבנתה צעד־צעד, מתוך בחירה, ומעכשיו והלאה את הבוסית של עצמך!",
-        booster_text: "את הבנת, את עשית, את הצלחת.\nזאת לא גרסה חדשה, זאת הגרסה האמיתית שלך, שנולדה מתוך עשייה."
-    }
-];
-
 export default function WeeklyTaskManager() {
     const { user: currentUser, isSystemAdmin } = useAdminDashboard();
     const [users, setUsers] = useState([]);
     const [groups, setGroups] = useState([]);
     const [tasks, setTasks] = useState([]);
+    const [taskTemplates, setTaskTemplates] = useState([]);
     const [targetType, setTargetType] = useState('user'); 
     const [selectedUser, setSelectedUser] = useState(''); // Stores email string for assign tab
     const [selectedGroup, setSelectedGroup] = useState('');
@@ -282,15 +109,18 @@ export default function WeeklyTaskManager() {
         setIsLoading(true);
         try {
             const listUsers = isSystemAdmin ? () => User.filter({}) : () => User.listForStaff(currentUser);
-            const [allUsers, allGroups, allTasks] = await Promise.all([
+            const [allUsers, allGroups, allTasks, templatesList] = await Promise.all([
                 listUsers(),
                 UserGroup.list(),
-                WeeklyTask.list()
+                WeeklyTask.list(),
+                WeeklyTaskTemplate.list('week').catch(() => [])
             ]);
             const traineesOnly = (allUsers || []).filter(u => (u.role || '').toLowerCase() !== 'admin' && (u.role || '').toLowerCase() !== 'trainer');
             setUsers(traineesOnly);
             setGroups(groupsForStaff(allGroups || [], currentUser, isSystemAdmin));
             setTasks(allTasks || []);
+            const sorted = (Array.isArray(templatesList) ? templatesList : []).sort((a, b) => (a.week || 0) - (b.week || 0));
+            setTaskTemplates(sorted);
         } catch (error) {
             console.error('Error loading data:', error);
             setFeedback({ type: 'error', message: 'שגיאה בטעינת הנתונים' });
@@ -326,6 +156,10 @@ export default function WeeklyTaskManager() {
             showFeedback('error', 'יש לבחור מתאמן או קבוצה.');
             return;
         }
+        if (taskTemplates.length === 0) {
+            showFeedback('error', 'לא נמצאו תבניות משימות שבועיות. יש להוסיף תבניות בקטע "ניהול תפריטים" > ניהול תבניות משימות בוסטר (או בתוכניות > ניהול בוסטר).');
+            return;
+        }
 
         setIsProcessing(true);
         try {
@@ -336,10 +170,7 @@ export default function WeeklyTaskManager() {
                     await WeeklyTask.delete(task.id);
                 }
 
-                const userGender = user.gender === 'female' ? 'female' : 'male';
-                const predefinedTasks = userGender === 'female' ? predefinedTasksFemale : predefinedTasksMale;
-
-                const newTasks = predefinedTasks.map(taskTemplate => {
+                const newTasks = taskTemplates.map(taskTemplate => {
                     const weekStartDate = addDays(newStartDate, (taskTemplate.week - 1) * 7);
                     const weekEndDate = addDays(weekStartDate, 6);
 
@@ -440,12 +271,14 @@ export default function WeeklyTaskManager() {
                     
                     const existingTasks = await WeeklyTask.filter({ user_email: user.email });
                     if (!existingTasks || existingTasks.length === 0) {
-                        // If no tasks exist, create them with current date as start
+                        // If no tasks exist, create them from templates (not hardcoded)
+                        if (taskTemplates.length === 0) {
+                            showFeedback('error', 'לא נמצאו תבניות משימות שבועיות. יש להוסיף תבניות בקטע ניהול בוסטר > ניהול תבניות משימות בוסטר.');
+                            continue;
+                        }
                         const startDate = new Date();
-                        const userGender = user.gender === 'female' ? 'female' : 'male';
-                        const predefinedTasks = userGender === 'female' ? predefinedTasksFemale : predefinedTasksMale;
 
-                        const newTasks = predefinedTasks.map(taskTemplate => {
+                        const newTasks = taskTemplates.map(taskTemplate => {
                             const weekStartDate = addDays(startDate, (taskTemplate.week - 1) * 7);
                             const weekEndDate = addDays(weekStartDate, 6);
 
@@ -573,18 +406,20 @@ export default function WeeklyTaskManager() {
             if (!selectedUserData) {
                 throw new Error('User not found');
             }
+            if (taskTemplates.length === 0) {
+                showFeedback('error', 'לא נמצאו תבניות משימות. יש להוסיף תבניות בקטע ניהול בוסטר > ניהול תבניות משימות בוסטר.');
+                setIsProcessing(false);
+                return;
+            }
 
             const tasksToCreate = [];
-            const userGender = selectedUserData.gender === 'female' ? 'female' : 'male';
-            const predefinedTasks = userGender === 'female' ? predefinedTasksFemale : predefinedTasksMale;
-            
             const userStartDate = selectedUserData.booster_start_date ? parseISO(selectedUserData.booster_start_date) : new Date();
 
             for (const weekNum of weeksToAssign) {
-                const taskTemplate = predefinedTasks.find(t => t.week === weekNum);
+                const taskTemplate = taskTemplates.find(t => t.week === weekNum);
                 
                 if (!taskTemplate) {
-                    console.warn(`No predefined task found for week ${weekNum}`);
+                    console.warn(`No template found for week ${weekNum}`);
                     continue;
                 }
 
@@ -628,6 +463,10 @@ export default function WeeklyTaskManager() {
             showFeedback('error', 'יש לבחור שבועות להקצאה.');
             return;
         }
+        if (taskTemplates.length === 0) {
+            showFeedback('error', 'לא נמצאו תבניות משימות. יש להוסיף תבניות בקטע ניהול בוסטר > ניהול תבניות משימות בוסטר.');
+            return;
+        }
 
         if (!window.confirm(`האם אתה בטוח שברצונך להקצות את שבועות ${weeksToAssign.join(',')} לכל המתאמנים הפעילים?`)) {
             return;
@@ -643,15 +482,12 @@ export default function WeeklyTaskManager() {
             for (const user of allUsers) {
                 if (user.role === 'admin') continue;
 
-                const userGender = user.gender === 'female' ? 'female' : 'male';
-                const predefinedTasks = userGender === 'female' ? predefinedTasksFemale : predefinedTasksMale;
-                
                 const userStartDate = user.booster_start_date ? parseISO(user.booster_start_date) : new Date();
 
                 for (const weekNum of weeksToAssign) {
-                    const taskTemplate = predefinedTasks.find(t => t.week === weekNum);
+                    const taskTemplate = taskTemplates.find(t => t.week === weekNum);
                     if (!taskTemplate) {
-                        console.warn(`No predefined task found for week ${weekNum} for user ${user.email}`);
+                        console.warn(`No template found for week ${weekNum} for user ${user.email}`);
                         continue;
                     }
 
@@ -797,7 +633,7 @@ export default function WeeklyTaskManager() {
         };
     };
 
-    const weekOptions = predefinedTasksMale.map(task => ({
+    const weekOptions = taskTemplates.map(task => ({
         value: task.week,
         label: `שבוע ${task.week} - ${task.title}`
     }));
@@ -1075,12 +911,17 @@ export default function WeeklyTaskManager() {
                             הפעלה/ביטול משימות שבועיות
                         </h4>
                         <p className="text-sm text-slate-600">
-                            מפעיל/מבטל את תוכנית הבוסטר עבור היעד הנבחר. הפעלה תיצור משימות חדשות אם אין קיימות.
+                            מפעיל/מבטל את תוכנית הבוסטר עבור היעד הנבחר. הפעלה תיצור משימות חדשות מתבניות המשימות (לא מקוד מקובע) – וודא שיש תבניות בקטע ניהול בוסטר.
                         </p>
+                        {taskTemplates.length === 0 && (
+                            <p className="text-sm text-amber-700 bg-amber-50 p-2 rounded">
+                                אין תבניות משימות. הוסף תבניות בתוכניות → ניהול בוסטר → ניהול תבניות משימות בוסטר כדי להפעיל משימות.
+                            </p>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Button
                                 onClick={() => handleTaskActivation(true)}
-                                disabled={isProcessing || getTargetUsers().length === 0}
+                                disabled={isProcessing || getTargetUsers().length === 0 || taskTemplates.length === 0}
                                 className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
                             >
                                 <Play className="w-4 h-4" />

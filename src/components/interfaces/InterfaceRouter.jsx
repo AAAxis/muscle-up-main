@@ -266,8 +266,8 @@ export default function InterfaceRouter({ children, currentPageName }) {
     const isStaff = isAdmin || isTrainer;
 
     if (!isStaff) {
-      // Define what a complete profile is
-      const isProfileComplete = user.name && user.gender && user.birth_date && user.height && user.initial_weight;
+      // Define what a complete profile is (must match CompleteProfile.jsx required fields)
+      const isProfileComplete = user.name && user.gender && user.birth_date && user.height != null && user.initial_weight != null && user.coach_name && user.coach_email;
 
       // Check 1: Profile not complete - redirect to CompleteProfile
       if (!isProfileComplete) {
@@ -285,6 +285,17 @@ export default function InterfaceRouter({ children, currentPageName }) {
     return null; // All checks passed
   }, [user, isLoading, currentPageName, isPublicPage]);
 
+
+  // Refetch user when route changes so redirect logic uses fresh data (e.g. after completing profile).
+  // Without this, navigating from CompleteProfile -> Contract keeps stale user and redirects back -> loop.
+  const prevPathRef = React.useRef(location.pathname);
+  useEffect(() => {
+    if (isPublicPage || !user) return;
+    if (prevPathRef.current !== location.pathname) {
+      prevPathRef.current = location.pathname;
+      loadUser();
+    }
+  }, [location.pathname, isPublicPage, user]);
 
   useEffect(() => {
     if (memoizedUserChecks) {

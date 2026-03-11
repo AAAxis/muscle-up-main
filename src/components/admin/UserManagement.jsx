@@ -11,9 +11,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Loader2, User as UserIcon, Scale, Activity, ClipboardList, MessageSquare, Calendar, ChevronLeft, ChevronRight, Share2, Cake, Percent, HeartPulse, Weight, Recycle, Ruler, Droplets, Zap, Target, PieChart, AlertTriangle,
-  TrendingUp, TrendingDown, Minus, Dumbbell, Clock, WifiOff, RefreshCw, Copy, X, Bell, CheckCircle, AlertCircle, ChevronsUpDown, Check, ArrowRight, Camera
+  TrendingUp, TrendingDown, Minus, Dumbbell, Clock, WifiOff, RefreshCw, Copy, X, Bell, CheckCircle, AlertCircle, ChevronsUpDown, Check, ArrowRight, Camera, Edit, Save
 } from 'lucide-react';
 import {
   Popover,
@@ -185,11 +188,151 @@ function AvatarWithUpload({ user, size = 'lg', onImageUpdated }) {
 // ══════════════════════════════════════════
 // ── User Detail Screen ──
 // ══════════════════════════════════════════
-function UserDetailScreen({ user, onBack, displayValue, syncUserWithLatestMeasurements, onImageUpdated }) {
+function UserDetailScreen({ user, onBack, shareableUserLink, displayValue, syncUserWithLatestMeasurements, onImageUpdated, onUserUpdated }) {
   const [userDetails, setUserDetails] = useState(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(true);
   const [isCopied, setIsCopied] = useState(false);
   const [activeTab, setActiveTab] = useState('tracking');
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  const handleCopyShareLink = useCallback(() => {
+    if (!shareableUserLink) return;
+    navigator.clipboard.writeText(shareableUserLink);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2500);
+  }, [shareableUserLink]);
+
+  const buildFormFromUser = useCallback((d) => {
+    if (!d) return {};
+    const heightCm = d.height != null && d.height !== '' ? (typeof d.height === 'number' ? d.height * 100 : parseFloat(d.height) * 100) : '';
+    return {
+      name: d.name || d.full_name || '',
+      full_name: d.full_name || d.name || '',
+      displayName: d.displayName || '',
+      email: d.email || '',
+      status: d.status || 'active',
+      coach_name: d.coach_name || '',
+      coach_email: d.coach_email || '',
+      coach_phone: d.coach_phone || '',
+      role: d.role || 'trainee',
+      group_names: Array.isArray(d.group_names) ? d.group_names.join(', ') : (d.group_names || ''),
+      booster_enabled: !!d.booster_enabled,
+      nutrition_access: !!d.nutrition_access,
+      contract_signed: !!d.contract_signed,
+      gender: d.gender || '',
+      phone: d.phone || '',
+      birth_date: d.birth_date ? (d.birth_date.split && d.birth_date.split('T')[0]) : '',
+      start_date: d.start_date ? (d.start_date.split && d.start_date.split('T')[0]) : '',
+      age: d.age != null && d.age !== '' ? String(d.age) : '',
+      height: heightCm !== '' ? String(heightCm) : '',
+      initial_weight: d.initial_weight != null && d.initial_weight !== '' ? String(d.initial_weight) : '',
+      weight: d.weight != null && d.weight !== '' ? String(d.weight) : (d.current_weight != null && d.current_weight !== '' ? String(d.current_weight) : ''),
+      bmi: d.bmi != null && d.bmi !== '' ? String(d.bmi) : '',
+      metabolic_age: d.metabolic_age != null && d.metabolic_age !== '' ? String(d.metabolic_age) : '',
+      visceral_fat: d.visceral_fat != null && d.visceral_fat !== '' ? String(d.visceral_fat) : '',
+      muscle_mass: d.muscle_mass != null && d.muscle_mass !== '' ? String(d.muscle_mass) : '',
+      fat_percentage: d.fat_percentage != null && d.fat_percentage !== '' ? String(d.fat_percentage) : '',
+      body_water_percentage: d.body_water_percentage != null && d.body_water_percentage !== '' ? String(d.body_water_percentage) : '',
+      physique_rating: d.physique_rating != null && d.physique_rating !== '' ? String(d.physique_rating) : '',
+      bmr: d.bmr != null && d.bmr !== '' ? String(d.bmr) : '',
+      neck_circumference: d.neck_circumference != null && d.neck_circumference !== '' ? String(d.neck_circumference) : '',
+      chest_circumference: d.chest_circumference != null && d.chest_circumference !== '' ? String(d.chest_circumference) : '',
+      waist_circumference: d.waist_circumference != null && d.waist_circumference !== '' ? String(d.waist_circumference) : '',
+      hip_circumference: d.hip_circumference != null && d.hip_circumference !== '' ? String(d.hip_circumference) : '',
+      glutes_circumference: d.glutes_circumference != null && d.glutes_circumference !== '' ? String(d.glutes_circumference) : '',
+      bicep_circumference_right: d.bicep_circumference_right != null && d.bicep_circumference_right !== '' ? String(d.bicep_circumference_right) : '',
+      bicep_circumference_left: d.bicep_circumference_left != null && d.bicep_circumference_left !== '' ? String(d.bicep_circumference_left) : '',
+      thigh_circumference_right: d.thigh_circumference_right != null && d.thigh_circumference_right !== '' ? String(d.thigh_circumference_right) : '',
+      thigh_circumference_left: d.thigh_circumference_left != null && d.thigh_circumference_left !== '' ? String(d.thigh_circumference_left) : '',
+      calf_circumference_right: d.calf_circumference_right != null && d.calf_circumference_right !== '' ? String(d.calf_circumference_right) : '',
+      calf_circumference_left: d.calf_circumference_left != null && d.calf_circumference_left !== '' ? String(d.calf_circumference_left) : '',
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isEditDialogOpen) return;
+    const d = userDetails || user;
+    if (d && (user?.uid || user?.id)) setEditForm(buildFormFromUser(d));
+  }, [userDetails, user, user?.uid, user?.id, buildFormFromUser, isEditDialogOpen]);
+
+  const openEditDialog = useCallback((u) => {
+    const d = u || userDetails || user;
+    if (!d) return;
+    setEditForm(buildFormFromUser(d));
+    setEditError('');
+    setIsEditDialogOpen(true);
+  }, [userDetails, user, buildFormFromUser]);
+
+  const handleSaveEdit = useCallback(async () => {
+    const uid = user?.uid || user?.id;
+    if (!uid) return;
+    setIsSavingEdit(true);
+    setEditError('');
+    try {
+      const groupNamesStr = (editForm.group_names || '').trim();
+      const group_names = groupNamesStr ? groupNamesStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const heightVal = editForm.height !== '' && !isNaN(parseFloat(editForm.height)) ? parseFloat(editForm.height) / 100 : undefined;
+      const num = (v) => (v !== '' && v != null && !isNaN(parseFloat(v)) ? parseFloat(v) : undefined);
+      const payload = {
+        name: (editForm.name || '').trim() || undefined,
+        full_name: (editForm.full_name || '').trim() || undefined,
+        displayName: (editForm.displayName || '').trim() || undefined,
+        email: (editForm.email || '').trim() || undefined,
+        status: editForm.status || undefined,
+        coach_name: (editForm.coach_name || '').trim() || undefined,
+        coach_email: (editForm.coach_email || '').trim() || undefined,
+        coach_phone: (editForm.coach_phone || '').trim() || undefined,
+        role: (editForm.role || 'trainee').trim() || undefined,
+        group_names: group_names.length ? group_names : undefined,
+        booster_enabled: editForm.booster_enabled,
+        nutrition_access: editForm.nutrition_access,
+        contract_signed: editForm.contract_signed,
+        gender: (editForm.gender || '').trim() || undefined,
+        phone: (editForm.phone || '').trim() || undefined,
+        birth_date: (editForm.birth_date || '').trim() || undefined,
+        start_date: (editForm.start_date || '').trim() || undefined,
+        age: num(editForm.age),
+        height: heightVal,
+        initial_weight: num(editForm.initial_weight),
+        weight: num(editForm.weight),
+        current_weight: num(editForm.weight),
+        bmi: num(editForm.bmi),
+        metabolic_age: num(editForm.metabolic_age),
+        visceral_fat: num(editForm.visceral_fat),
+        muscle_mass: num(editForm.muscle_mass),
+        fat_percentage: num(editForm.fat_percentage),
+        body_water_percentage: num(editForm.body_water_percentage),
+        physique_rating: num(editForm.physique_rating),
+        bmr: num(editForm.bmr),
+        neck_circumference: num(editForm.neck_circumference),
+        chest_circumference: num(editForm.chest_circumference),
+        waist_circumference: num(editForm.waist_circumference),
+        hip_circumference: num(editForm.hip_circumference),
+        glutes_circumference: num(editForm.glutes_circumference),
+        bicep_circumference_right: num(editForm.bicep_circumference_right),
+        bicep_circumference_left: num(editForm.bicep_circumference_left),
+        thigh_circumference_right: num(editForm.thigh_circumference_right),
+        thigh_circumference_left: num(editForm.thigh_circumference_left),
+        calf_circumference_right: num(editForm.calf_circumference_right),
+        calf_circumference_left: num(editForm.calf_circumference_left),
+      };
+      const clean = {};
+      Object.keys(payload).forEach(k => { if (payload[k] !== undefined && payload[k] !== '') clean[k] = payload[k]; });
+      await User.update(uid, clean);
+      const updatedUser = { ...(userDetails || user), ...clean };
+      setUserDetails(updatedUser);
+      if (onUserUpdated) onUserUpdated(updatedUser);
+      setIsEditDialogOpen(false);
+    } catch (err) {
+      console.error('Failed to update user:', err);
+      setEditError('שגיאה בעדכון המשתמש');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  }, [user, editForm, userDetails, onUserUpdated]);
 
   useEffect(() => {
     if (!user) return;
@@ -250,42 +393,115 @@ function UserDetailScreen({ user, onBack, displayValue, syncUserWithLatestMeasur
 
   return (
     <div className="space-y-6" dir="rtl">
-      {/* Back button */}
-      <Button variant="ghost" onClick={onBack} className="flex items-center gap-2 text-slate-600 hover:text-slate-800 mb-2">
-        <ChevronRight className="w-4 h-4" />
-        חזרה לרשימת מתאמנים
-      </Button>
+      {/* Back button + actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button variant="ghost" onClick={onBack} className="flex items-center gap-2 text-slate-600 hover:text-slate-800">
+          <ChevronRight className="w-4 h-4" />
+          חזרה לרשימת מתאמנים
+        </Button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button
+            onClick={handleSaveEdit}
+            disabled={isSavingEdit}
+            className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+            title="שמור שינויים"
+          >
+            {isSavingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            שמור
+          </Button>
+          <Button variant="outline" onClick={() => openEditDialog()} className="gap-2 border-slate-300 text-slate-700 hover:bg-slate-50" title="ערוך כל השדות (מדידות והיקפים)">
+            <Edit className="w-4 h-4" />
+            ערוך מלא
+          </Button>
+          {shareableUserLink && (
+          <Button
+            variant="outline"
+            onClick={handleCopyShareLink}
+            className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
+          >
+            {isCopied ? (
+              <>
+                <Check className="w-4 h-4" />
+                הועתק!
+              </>
+            ) : (
+              <>
+                <Share2 className="w-4 h-4" />
+                שתף קישור
+              </>
+            )}
+          </Button>
+        )}
+        </div>
+      </div>
 
-      {/* User Header Card */}
+      {/* User Header Card — always editable */}
       <Card>
         <CardContent className="p-6">
-          <div className="flex flex-col sm:flex-row items-start gap-4">
-            <AvatarWithUpload user={detailUser} size="lg" onImageUpdated={onImageUpdated} />
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <h2 className="text-2xl font-bold text-slate-800">{detailUser.name || detailUser.full_name || 'חסר שם'}</h2>
-                {detailUser.booster_enabled && (
-                  <Badge className="bg-purple-100 text-purple-700 border border-purple-200 text-xs"><Zap className="w-2.5 h-2.5 ms-1" />בוסטר</Badge>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 mt-2">
-                <span className="flex items-center gap-1"><span className="text-slate-400">אימייל:</span> {detailUser.email}</span>
-                {detailUser.coach_name && <span className="flex items-center gap-1"><span className="text-slate-400">מאמן:</span> {detailUser.coach_name}</span>}
-                {Array.isArray(detailUser.group_names) && detailUser.group_names.length > 0 && (
-                  <span className="flex items-center gap-1"><span className="text-slate-400">קבוצות:</span> {detailUser.group_names.join(', ')}</span>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-2 mt-3">
-                <Badge className={`${
-                  detailUser.status === 'active' || detailUser.status === 'פעיל' ? 'bg-green-500 text-white' :
-                  detailUser.status === 'inactive' || detailUser.status === 'לא פעיל' ? 'bg-red-500 text-white' :
-                  detailUser.status === 'on_hold' || detailUser.status === 'בהמתנה' ? 'bg-yellow-500 text-white' :
-                  'bg-gray-500 text-white'
-                } text-xs`}>
-                  {getStatusLabel(detailUser.status)}
-                </Badge>
+          <div className="flex flex-col gap-6">
+            <div className="flex items-center justify-end gap-2 mb-2">
+              <Button variant="outline" size="sm" onClick={() => openEditDialog()} className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50">
+                <Edit className="w-4 h-4" />
+                ערוך (כל השדות)
+              </Button>
+              <Button size="sm" onClick={handleSaveEdit} disabled={isSavingEdit} className="gap-1.5 bg-blue-600 hover:bg-blue-700">
+                {isSavingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                שמור
+              </Button>
+            </div>
+            <div className="flex flex-col sm:flex-row items-start gap-4">
+              <AvatarWithUpload user={detailUser} size="lg" onImageUpdated={onImageUpdated} />
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl">
+                <div className="space-y-1"><Label className="text-xs">שם</Label><Input value={editForm.name || ''} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="שם" /></div>
+                <div className="space-y-1"><Label className="text-xs">שם מלא</Label><Input value={editForm.full_name || ''} onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))} placeholder="שם מלא" /></div>
+                <div className="space-y-1 sm:col-span-2"><Label className="text-xs">אימייל</Label><Input type="email" value={editForm.email || ''} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} placeholder="user@example.com" /></div>
+                <div className="space-y-1"><Label className="text-xs">סטטוס</Label>
+                  <Select value={editForm.status || 'active'} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">פעיל</SelectItem>
+                      <SelectItem value="inactive">לא פעיל</SelectItem>
+                      <SelectItem value="on_hold">בהמתנה</SelectItem>
+                      <SelectItem value="frozen">מוקפא</SelectItem>
+                      <SelectItem value="ended">הסתיים</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1"><Label className="text-xs">תפקיד</Label>
+                  <Select value={editForm.role || 'trainee'} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="trainee">מתאמן/ת</SelectItem>
+                      <SelectItem value="trainer">מאמן/ת</SelectItem>
+                      <SelectItem value="admin">מנהל מערכת</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1"><Label className="text-xs">מאמן</Label><Input value={editForm.coach_name || ''} onChange={e => setEditForm(f => ({ ...f, coach_name: e.target.value }))} placeholder="שם מאמן" /></div>
+                <div className="space-y-1"><Label className="text-xs">אימייל מאמן</Label><Input type="email" value={editForm.coach_email || ''} onChange={e => setEditForm(f => ({ ...f, coach_email: e.target.value }))} placeholder="coach@example.com" /></div>
+                <div className="space-y-1"><Label className="text-xs">טלפון מאמן</Label><Input type="tel" value={editForm.coach_phone || ''} onChange={e => setEditForm(f => ({ ...f, coach_phone: e.target.value }))} placeholder="טלפון מאמן" /></div>
+                <div className="space-y-1"><Label className="text-xs">טלפון משתמש</Label><Input type="tel" value={editForm.phone || ''} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} placeholder="טלפון" /></div>
+                <div className="space-y-1 sm:col-span-2"><Label className="text-xs">קבוצות (מופרדות בפסיק)</Label><Input value={editForm.group_names || ''} onChange={e => setEditForm(f => ({ ...f, group_names: e.target.value }))} placeholder="קבוצה 1, קבוצה 2" /></div>
+                <div className="space-y-1"><Label className="text-xs">מין</Label>
+                  <Select value={editForm.gender || ''} onValueChange={v => setEditForm(f => ({ ...f, gender: v }))}>
+                    <SelectTrigger><SelectValue placeholder="בחר" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="male">זכר</SelectItem>
+                      <SelectItem value="female">נקבה</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1"><Label className="text-xs">תאריך לידה</Label><Input type="date" value={editForm.birth_date || ''} onChange={e => setEditForm(f => ({ ...f, birth_date: e.target.value }))} /></div>
+                <div className="space-y-1"><Label className="text-xs">תאריך הצטרפות</Label><Input type="date" value={editForm.start_date || ''} onChange={e => setEditForm(f => ({ ...f, start_date: e.target.value }))} /></div>
+                <div className="space-y-1"><Label className="text-xs">גיל</Label><Input type="number" min="1" max="120" value={editForm.age || ''} onChange={e => setEditForm(f => ({ ...f, age: e.target.value }))} placeholder="גיל" /></div>
+                <div className="flex flex-wrap items-center gap-4 sm:col-span-2">
+                  <div className="flex items-center gap-2"><Checkbox id="booster-inline" checked={editForm.booster_enabled} onCheckedChange={c => setEditForm(f => ({ ...f, booster_enabled: !!c }))} /><Label htmlFor="booster-inline" className="text-xs cursor-pointer">בוסטר</Label></div>
+                  <div className="flex items-center gap-2"><Checkbox id="nutrition-inline" checked={editForm.nutrition_access} onCheckedChange={c => setEditForm(f => ({ ...f, nutrition_access: !!c }))} /><Label htmlFor="nutrition-inline" className="text-xs cursor-pointer">תזונה</Label></div>
+                  <div className="flex items-center gap-2"><Checkbox id="contract-inline" checked={editForm.contract_signed} onCheckedChange={c => setEditForm(f => ({ ...f, contract_signed: !!c }))} /><Label htmlFor="contract-inline" className="text-xs cursor-pointer">חוזה חתום</Label></div>
+                </div>
               </div>
             </div>
+            {editError && <div className="text-sm text-red-600">{editError}</div>}
           </div>
         </CardContent>
       </Card>
@@ -460,6 +676,121 @@ function UserDetailScreen({ user, onBack, displayValue, syncUserWithLatestMeasur
           </TabsContent>
         </Tabs>
       )}
+
+      {/* Edit User Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden" dir="rtl">
+          <DialogHeader className="text-right ps-8">
+            <DialogTitle className="flex items-center gap-2"><Edit className="w-5 h-5 text-blue-600" />עריכת משתמש</DialogTitle>
+            <DialogDescription>עדכן את כל השדות הרצויים. שדות ריקים לא יעודכנו במערכת.</DialogDescription>
+          </DialogHeader>
+          {editError && <div className="bg-red-50 border border-red-200 rounded-lg p-2 text-red-800 text-sm">{editError}</div>}
+          <ScrollArea className="max-h-[60vh] px-1">
+            <div className="space-y-6 py-4">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-2">מידע בסיסי</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label>שם</Label><Input value={editForm.name || ''} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} placeholder="שם" /></div>
+                  <div className="space-y-1"><Label>שם מלא</Label><Input value={editForm.full_name || ''} onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))} placeholder="שם מלא" /></div>
+                  <div className="space-y-1 sm:col-span-2"><Label>שם לתצוגה (Display name)</Label><Input value={editForm.displayName || ''} onChange={e => setEditForm(f => ({ ...f, displayName: e.target.value }))} placeholder="שם לתצוגה" /></div>
+                  <div className="space-y-1 sm:col-span-2"><Label>אימייל</Label><Input type="email" value={editForm.email || ''} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} placeholder="user@example.com" /></div>
+                  <div className="space-y-1"><Label>סטטוס</Label>
+                    <Select value={editForm.status || 'active'} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">פעיל</SelectItem>
+                        <SelectItem value="inactive">לא פעיל</SelectItem>
+                        <SelectItem value="on_hold">בהמתנה</SelectItem>
+                        <SelectItem value="frozen">מוקפא</SelectItem>
+                        <SelectItem value="ended">הסתיים</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1"><Label>תפקיד</Label>
+                    <Select value={editForm.role || 'trainee'} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="trainee">מתאמן/ת</SelectItem>
+                        <SelectItem value="trainer">מאמן/ת</SelectItem>
+                        <SelectItem value="admin">מנהל מערכת</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1"><Label>שם מאמן</Label><Input value={editForm.coach_name || ''} onChange={e => setEditForm(f => ({ ...f, coach_name: e.target.value }))} placeholder="מאמן" /></div>
+                  <div className="space-y-1"><Label>אימייל מאמן</Label><Input type="email" value={editForm.coach_email || ''} onChange={e => setEditForm(f => ({ ...f, coach_email: e.target.value }))} placeholder="coach@example.com" /></div>
+                  <div className="space-y-1"><Label>טלפון מאמן</Label><Input type="tel" value={editForm.coach_phone || ''} onChange={e => setEditForm(f => ({ ...f, coach_phone: e.target.value }))} placeholder="טלפון מאמן" /></div>
+                  <div className="space-y-1"><Label>טלפון משתמש</Label><Input type="tel" value={editForm.phone || ''} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} placeholder="טלפון" /></div>
+                  <div className="space-y-1"><Label>מין</Label>
+                    <Select value={editForm.gender || ''} onValueChange={v => setEditForm(f => ({ ...f, gender: v }))}>
+                      <SelectTrigger><SelectValue placeholder="בחר מין" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">זכר</SelectItem>
+                        <SelectItem value="female">נקבה</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1 sm:col-span-2"><Label>קבוצות (מופרדות בפסיק)</Label><Input value={editForm.group_names || ''} onChange={e => setEditForm(f => ({ ...f, group_names: e.target.value }))} placeholder="קבוצה 1, קבוצה 2" /></div>
+                  <div className="flex items-center gap-2"><Checkbox id="booster" checked={editForm.booster_enabled} onCheckedChange={c => setEditForm(f => ({ ...f, booster_enabled: !!c }))} /><Label htmlFor="booster">בוסטר מופעל</Label></div>
+                  <div className="flex items-center gap-2"><Checkbox id="nutrition" checked={editForm.nutrition_access} onCheckedChange={c => setEditForm(f => ({ ...f, nutrition_access: !!c }))} /><Label htmlFor="nutrition">גישה לתזונה</Label></div>
+                  <div className="flex items-center gap-2"><Checkbox id="contract_signed" checked={editForm.contract_signed} onCheckedChange={c => setEditForm(f => ({ ...f, contract_signed: !!c }))} /><Label htmlFor="contract_signed">חוזה חתום</Label></div>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-2">גיל ותאריכים</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1"><Label>תאריך לידה</Label><Input type="date" value={editForm.birth_date || ''} onChange={e => setEditForm(f => ({ ...f, birth_date: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>תאריך הצטרפות</Label><Input type="date" value={editForm.start_date || ''} onChange={e => setEditForm(f => ({ ...f, start_date: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>גיל</Label><Input type="number" min="1" max="120" value={editForm.age || ''} onChange={e => setEditForm(f => ({ ...f, age: e.target.value }))} placeholder="גיל" /></div>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-2">משקל וגובה</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="space-y-1"><Label>גובה (ס״מ)</Label><Input type="number" min="0" value={editForm.height || ''} onChange={e => setEditForm(f => ({ ...f, height: e.target.value }))} placeholder="170" /></div>
+                  <div className="space-y-1"><Label>משקל התחלתי</Label><Input type="number" step="0.1" value={editForm.initial_weight || ''} onChange={e => setEditForm(f => ({ ...f, initial_weight: e.target.value }))} placeholder="ק״ג" /></div>
+                  <div className="space-y-1"><Label>משקל נוכחי</Label><Input type="number" step="0.1" value={editForm.weight || ''} onChange={e => setEditForm(f => ({ ...f, weight: e.target.value }))} placeholder="ק״ג" /></div>
+                  <div className="space-y-1"><Label>BMI</Label><Input type="number" step="0.1" value={editForm.bmi || ''} onChange={e => setEditForm(f => ({ ...f, bmi: e.target.value }))} placeholder="BMI" /></div>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-2">הרכב גוף ומדדים</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="space-y-1"><Label>גיל מטבולי</Label><Input type="number" value={editForm.metabolic_age || ''} onChange={e => setEditForm(f => ({ ...f, metabolic_age: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>שומן ויסצרלי</Label><Input type="number" step="0.1" value={editForm.visceral_fat || ''} onChange={e => setEditForm(f => ({ ...f, visceral_fat: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>מסת שריר (ק״ג)</Label><Input type="number" step="0.1" value={editForm.muscle_mass || ''} onChange={e => setEditForm(f => ({ ...f, muscle_mass: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>אחוז שומן</Label><Input type="number" step="0.1" value={editForm.fat_percentage || ''} onChange={e => setEditForm(f => ({ ...f, fat_percentage: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>אחוז מים</Label><Input type="number" step="0.1" value={editForm.body_water_percentage || ''} onChange={e => setEditForm(f => ({ ...f, body_water_percentage: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>דירוג מבנה גוף (1-9)</Label><Input type="number" min="1" max="9" value={editForm.physique_rating || ''} onChange={e => setEditForm(f => ({ ...f, physique_rating: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>BMR</Label><Input type="number" value={editForm.bmr || ''} onChange={e => setEditForm(f => ({ ...f, bmr: e.target.value }))} /></div>
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-700 mb-2">מדידות היקפים (ס״מ)</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="space-y-1"><Label>צוואר</Label><Input type="number" step="0.1" value={editForm.neck_circumference || ''} onChange={e => setEditForm(f => ({ ...f, neck_circumference: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>חזה</Label><Input type="number" step="0.1" value={editForm.chest_circumference || ''} onChange={e => setEditForm(f => ({ ...f, chest_circumference: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>מותן</Label><Input type="number" step="0.1" value={editForm.waist_circumference || ''} onChange={e => setEditForm(f => ({ ...f, waist_circumference: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>ירכיים</Label><Input type="number" step="0.1" value={editForm.hip_circumference || ''} onChange={e => setEditForm(f => ({ ...f, hip_circumference: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>ישבן</Label><Input type="number" step="0.1" value={editForm.glutes_circumference || ''} onChange={e => setEditForm(f => ({ ...f, glutes_circumference: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>יד ימין</Label><Input type="number" step="0.1" value={editForm.bicep_circumference_right || ''} onChange={e => setEditForm(f => ({ ...f, bicep_circumference_right: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>יד שמאל</Label><Input type="number" step="0.1" value={editForm.bicep_circumference_left || ''} onChange={e => setEditForm(f => ({ ...f, bicep_circumference_left: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>ירך ימין</Label><Input type="number" step="0.1" value={editForm.thigh_circumference_right || ''} onChange={e => setEditForm(f => ({ ...f, thigh_circumference_right: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>ירך שמאל</Label><Input type="number" step="0.1" value={editForm.thigh_circumference_left || ''} onChange={e => setEditForm(f => ({ ...f, thigh_circumference_left: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>שוק ימין</Label><Input type="number" step="0.1" value={editForm.calf_circumference_right || ''} onChange={e => setEditForm(f => ({ ...f, calf_circumference_right: e.target.value }))} /></div>
+                  <div className="space-y-1"><Label>שוק שמאל</Label><Input type="number" step="0.1" value={editForm.calf_circumference_left || ''} onChange={e => setEditForm(f => ({ ...f, calf_circumference_left: e.target.value }))} /></div>
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
+          <DialogFooter className="gap-2 sm:flex-row-reverse">
+            <Button onClick={handleSaveEdit} disabled={isSavingEdit}>
+              {isSavingEdit ? <Loader2 className="w-4 h-4 animate-spin ms-2" /> : <Save className="w-4 h-4 ms-2" />}
+              שמור שינויים
+            </Button>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>ביטול</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -468,6 +799,10 @@ function UserDetailScreen({ user, onBack, displayValue, syncUserWithLatestMeasur
 // ── Main Component ──
 // ══════════════════════════════════════════
 export default function UserManagement({ initialUserEmail, startInEditMode, adminUser }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const basePath = location.pathname.startsWith('/trainer') ? '/trainer' : '/admin';
+
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -652,10 +987,23 @@ export default function UserManagement({ initialUserEmail, startInEditMode, admi
 
   useEffect(() => {
     if (initialUserEmail && users.length > 0) {
-      const userToSelect = users.find(u => u.email === initialUserEmail);
-      if (userToSelect) setSelectedDetailUser(userToSelect);
+      const identifier = (initialUserEmail || '').trim();
+      const userToSelect = users.find(
+        (u) =>
+          (u.email && u.email.toLowerCase() === identifier.toLowerCase()) ||
+          u.id === identifier ||
+          u.uid === identifier
+      );
+      if (userToSelect) {
+        setSelectedDetailUser(userToSelect);
+        setSearchTerm(userToSelect.id || userToSelect.uid || userToSelect.email || identifier);
+        const segment = encodeURIComponent(userToSelect.email || userToSelect.id || userToSelect.uid || identifier);
+        navigate(`${basePath}/user-management/user-list/${segment}`, { replace: true });
+      } else {
+        setSearchTerm(identifier);
+      }
     }
-  }, [initialUserEmail, users]);
+  }, [initialUserEmail, users, basePath, navigate]);
 
   const retryLoad = useCallback(() => { setNetworkError(false); setError(null); loadData(); }, [loadData]);
   const forceRefresh = useCallback(() => { setLastRefresh(Date.now()); loadData(); }, [loadData]);
@@ -713,13 +1061,18 @@ export default function UserManagement({ initialUserEmail, startInEditMode, admi
           'bg-white border-slate-200'
         }`}
         style={{ direction: 'rtl' }}
-        onClick={() => setSelectedDetailUser(user)}
+        onClick={() => {
+          setSelectedDetailUser(user);
+          setSearchTerm(user.id || user.uid || user.email || '');
+          const segment = encodeURIComponent(user.email || user.id || user.uid || '');
+          navigate(`${basePath}/user-management/user-list/${segment}`);
+        }}
       >
         <div className={`p-3 sm:p-4 transition-colors ${warningLevel === 'critical' ? 'hover:bg-red-100' : warningLevel === 'warning' ? 'hover:bg-orange-100' : 'hover:bg-slate-50'}`}>
 
           {/* ── Mobile layout ── */}
           <div className="block sm:hidden space-y-3" style={{ direction: 'rtl', textAlign: 'right' }}>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <AvatarWithUpload user={user} size="sm" onImageUpdated={handleImageUpdated} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
@@ -799,7 +1152,8 @@ export default function UserManagement({ initialUserEmail, startInEditMode, admi
       if (currentUserId && user.id === currentUserId) return false;
       const userName = user.name || user.full_name || '';
       const userEmail = user.email || '';
-      const matchesSearch = searchTerm === '' || (typeof userName === 'string' && userName.toLowerCase().includes(searchTerm.toLowerCase())) || (typeof userEmail === 'string' && userEmail.toLowerCase().includes(searchTerm.toLowerCase()));
+      const userId = user.id || user.uid || '';
+      const matchesSearch = searchTerm === '' || (typeof userName === 'string' && userName.toLowerCase().includes(searchTerm.toLowerCase())) || (typeof userEmail === 'string' && userEmail.toLowerCase().includes(searchTerm.toLowerCase())) || (typeof userId === 'string' && userId.toLowerCase().includes(searchTerm.toLowerCase()));
       const groupMatch = selectedGroup === 'all' || (Array.isArray(user.group_names) && user.group_names.includes(selectedGroup));
       const matchesStatus = statusFilter === 'all' || (() => {
         const s = (user.status || '').toLowerCase();
@@ -832,13 +1186,22 @@ export default function UserManagement({ initialUserEmail, startInEditMode, admi
 
   // ── USER DETAIL SCREEN ──
   if (selectedDetailUser) {
+    const shareableUserLink = `${typeof window !== 'undefined' ? window.location.origin : ''}${basePath}/user-management/user-list/${encodeURIComponent(selectedDetailUser.email || selectedDetailUser.id || selectedDetailUser.uid || '')}`;
     return (
       <UserDetailScreen
         user={selectedDetailUser}
-        onBack={() => setSelectedDetailUser(null)}
+        shareableUserLink={shareableUserLink}
+        onBack={() => {
+          navigate(`${basePath}/user-management/user-list`);
+          setSelectedDetailUser(null);
+        }}
         displayValue={displayValue}
         syncUserWithLatestMeasurements={syncUserWithLatestMeasurements}
         onImageUpdated={handleImageUpdated}
+        onUserUpdated={(updatedUser) => {
+          setSelectedDetailUser(updatedUser);
+          setUsers(prev => prev.map(u => (u.id === updatedUser.id || u.uid === updatedUser.uid || (u.email && updatedUser.email && u.email.toLowerCase() === updatedUser.email.toLowerCase())) ? { ...u, ...updatedUser } : u));
+        }}
       />
     );
   }
@@ -850,7 +1213,7 @@ export default function UserManagement({ initialUserEmail, startInEditMode, admi
         <CardTitle className="text-lg">ניהול מתאמנים ({filteredUsers.length})</CardTitle>
         <CardDescription className="text-sm">לחץ על מתאמן לצפייה בפרטים מלאים, מעקב ופעילות.</CardDescription>
         <div className="flex flex-col gap-2 mt-2 md:flex-row md:flex-wrap">
-          <input type="text" placeholder="חיפוש לפי שם או אימייל..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-grow p-2 border rounded-md text-sm min-w-[200px]" style={{ direction: 'rtl', textAlign: 'right' }} />
+          <input type="text" placeholder="חיפוש לפי שם, אימייל או מזהה משתמש..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="flex-grow p-2 border rounded-md text-sm min-w-[200px]" style={{ direction: 'rtl', textAlign: 'right' }} />
           <Select value={selectedGroup} onValueChange={setSelectedGroup}><SelectTrigger className="w-full md:w-[220px] min-w-[150px]"><SelectValue placeholder="סינון לפי קבוצה" /></SelectTrigger><SelectContent><SelectItem value="all">כל הקבוצות</SelectItem>{groups.map(group => <SelectItem key={group.id} value={group.name}>{group.name}</SelectItem>)}</SelectContent></Select>
           <Select value={boosterFilter} onValueChange={setBoosterFilter}><SelectTrigger className="w-full md:w-[220px] min-w-[150px]"><SelectValue placeholder="סינון לפי בוסטר" /></SelectTrigger><SelectContent><SelectItem value="all">כל המשתמשים</SelectItem><SelectItem value="enabled">בוסטר מופעל</SelectItem><SelectItem value="disabled">בוסטר לא מופעל</SelectItem></SelectContent></Select>
           <Select value={weightChangeFilter} onValueChange={setWeightChangeFilter}><SelectTrigger className="w-full md:w-[220px] min-w-[150px]"><SelectValue placeholder="סינון לפי שינוי משקל" /></SelectTrigger><SelectContent><SelectItem value="all">הצג הכל</SelectItem><SelectItem value="gain">עלייה במשקל</SelectItem><SelectItem value="loss">ירידה במשקל</SelectItem><SelectItem value="stable">משקל יציב</SelectItem></SelectContent></Select>

@@ -15,6 +15,7 @@ import { Users, BarChart, Dumbbell, MessageSquare, ClipboardCheck, Mail, Trendin
 // Import all management components
 import UserManagement from '@/components/admin/UserManagement';
 import BoosterProgramManager from '@/components/admin/BoosterProgramManager';
+import BoosterPlusManager from '@/components/admin/BoosterPlusManager';
 import GroupManagement from '@/components/admin/GroupManagement';
 import RecipeAccessManager from '@/components/admin/RecipeAccessManager';
 import LecturesManager from '@/components/admin/LecturesManager';
@@ -57,6 +58,7 @@ export default function AdminDashboard({ activeTab: externalActiveTab, setActive
   // Get tab from URL params, fallback to external prop, then default to 'control-center'
   const urlTab = params.tab;
   const urlSubTab = params.subTab;
+  const urlUserEmail = params.userEmail; // from route /admin/user-management/user-list/:userEmail
   const initialTab = urlTab || externalActiveTab || 'control-center';
 
   // Internal state for active tab, initialized from URL or external prop or default
@@ -185,6 +187,15 @@ export default function AdminDashboard({ activeTab: externalActiveTab, setActive
       setInternalActiveTab(externalActiveTab);
     }
   }, [externalActiveTab, internalActiveTab, urlTab]);
+
+  // When route is /admin/user-management/user-list/:userEmail, show user-list tab and pass user to UserManagement (search bar will show user id)
+  useEffect(() => {
+    if (!urlUserEmail) return;
+    const decoded = decodeURIComponent(urlUserEmail);
+    setInternalActiveTab('user-management');
+    setUserManagementTab('user-list');
+    setUserManagementProps({ initialUserEmail: decoded, startInEditMode: false });
+  }, [urlUserEmail]);
 
   // Update external state when internal activeTab changes - Enhanced to handle sub-tabs and props
   // Renamed from handleNavigation in outline to handleTabChange to match existing structure
@@ -377,6 +388,13 @@ export default function AdminDashboard({ activeTab: externalActiveTab, setActive
       color: "from-blue-500 to-purple-600"
     },
     {
+      value: "booster-plus",
+      title: "בוסטר פלוס",
+      icon: "⚡",
+      description: "ניהול תכנית בוסטר פלוס ומתאמנים",
+      color: "from-amber-500 to-orange-600"
+    },
+    {
       value: "weekly-tasks",
       title: "משימות שבועיות",
       icon: "📅",
@@ -403,6 +421,13 @@ export default function AdminDashboard({ activeTab: externalActiveTab, setActive
       icon: "🍎",
       description: "ניהול בסיס נתונים של מזונות וערכים תזונתיים",
       color: "from-green-500 to-emerald-600"
+    },
+    {
+      value: "settings",
+      title: "הגדרות משתמש",
+      icon: "⚙️",
+      description: "הגדרות מתאמנים והרשאות",
+      color: "from-slate-500 to-slate-700"
     }
   ];
 
@@ -533,10 +558,12 @@ export default function AdminDashboard({ activeTab: externalActiveTab, setActive
     const renderSubComponent = (tab) => {
       switch (tab) {
         case 'booster': return <BoosterProgramManager />;
+        case 'booster-plus': return <BoosterPlusManager />;
         case 'weekly-tasks': return <WeeklyTaskManager />;
         case 'menu-management': return <MenuManagement />;
         case 'contract-editor': return <ContractEditor />;
         case 'food-database': return <FoodDatabase />;
+        case 'settings': return memoizedUserSettingsManager;
         default: return null;
       }
     };

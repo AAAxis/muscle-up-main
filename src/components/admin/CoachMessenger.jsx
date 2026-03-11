@@ -23,8 +23,12 @@ export default function CoachMessenger() {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [allUsers, allGroups] = await Promise.all([User.list(), UserGroup.list()]);
-                setUsers(allUsers);
+                const listUsers = currentUser ? () => User.listForStaff(currentUser) : () => User.list();
+                const [allUsers, allGroups] = await Promise.all([
+                    listUsers(),
+                    UserGroup.list()
+                ]);
+                setUsers(allUsers || []);
                 setGroups(groupsForStaff(allGroups || [], currentUser, isSystemAdmin));
             } catch (error) {
                 console.error('Error fetching data:', error);
@@ -32,7 +36,7 @@ export default function CoachMessenger() {
             }
         };
         fetchData();
-    }, []);
+    }, [currentUser, isSystemAdmin]);
 
     const handleSendMessage = async () => {
         // Data Integrity Fix: Validate inputs before proceeding
@@ -72,7 +76,7 @@ export default function CoachMessenger() {
                 targetEmails = [selectedUserEmail];
                 
             } else if (sendTo === 'group') {
-                const groupUsers = users.filter(u => u.group_name === selectedGroupName && u.email);
+                const groupUsers = users.filter(u => u.email && Array.isArray(u.group_names) && u.group_names.includes(selectedGroupName));
                 if (groupUsers.length === 0) {
                     throw new Error(`לא נמצאו מתאמנים תקינים בקבוצת "${selectedGroupName}"`);
                 }
@@ -86,7 +90,9 @@ export default function CoachMessenger() {
             const messagePromises = targetEmails.map(email => {
                 return CoachMessage.create({
                     user_email: email,
-                    message_text: messageText.trim()
+                    message_text: messageText.trim(),
+                    is_read: false,
+                    created_date: new Date().toISOString()
                 });
             });
 

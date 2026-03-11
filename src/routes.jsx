@@ -49,9 +49,9 @@ export const ROUTES = [
   { path: '/exercise-db-tester', pageName: 'ExerciseDBTester', element: <ExerciseDBTester /> },
   { path: '/delete-request', pageName: 'DeleteRequest', element: <DeleteRequest /> },
   { path: '/invite', pageName: 'InviteRedirect', element: <InviteRedirect /> },
-  // Admin user detail (most specific first)
-  { path: '/admin/user-management/user-list/:userEmail', pageName: 'AdminDashboard', element: <AdminUserDetail /> },
-  { path: '/trainer/user-management/user-list/:userEmail', pageName: 'AdminDashboard', element: <AdminUserDetail /> },
+  // Admin user detail (most specific first) — now handled by dashboard so search bar shows user id
+  { path: '/admin/user-management/user-list/:userEmail', pageName: 'AdminDashboard', element: <AdminDashboard /> },
+  { path: '/trainer/user-management/user-list/:userEmail', pageName: 'AdminDashboard', element: <AdminDashboard /> },
   // Admin (system admin) dashboard — most specific first so params are correct
   { path: '/admin/:tab/:subTab', pageName: 'AdminDashboard', element: <AdminDashboard /> },
   { path: '/admin/:tab', pageName: 'AdminDashboard', element: <AdminDashboard /> },

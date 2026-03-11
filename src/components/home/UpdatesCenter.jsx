@@ -86,10 +86,10 @@ export default function UpdatesCenter() {
         try {
             const dataSources = [
                 EventParticipation.filter({ user_email: user.email }),
-                CoachMessage.filter({ user_email: user.email, is_read: false }, '-created_date'),
+                CoachMessage.filter({ user_email: user.email }),
                 PreMadeWorkout.filter({ target_user_email: user.email, is_accepted: false }, '-created_date'),
                 WeightReminder.filter({ user_email: user.email, is_dismissed: false }, '-created_date'),
-                AdminMessage.list('-sent_date'), // Get all admin messages
+                AdminMessage.list('-sent_date'),
                 user.group_names?.length > 0 ? GroupMessage.filter({ group_name: { $in: user.group_names } }, '-sent_date') : Promise.resolve([]),
                 user.group_names?.length > 0 ? GroupEvent.list('-start_datetime') : Promise.resolve([])
             ];
@@ -116,20 +116,26 @@ export default function UpdatesCenter() {
             const fetchedNotifications = [];
             const notificationIds = new Set(); // To prevent duplicates
 
-            // Process Coach Messages - with dismiss functionality
+            // Process Coach Messages - show unread (is_read false or undefined)
             if (coachMessagesResult.status === 'fulfilled' && Array.isArray(coachMessagesResult.value)) {
-                coachMessagesResult.value.forEach(msg => {
+                const unread = coachMessagesResult.value.filter(msg => msg.is_read !== true);
+                const sorted = unread.sort((a, b) => {
+                    const da = a.created_date ? new Date(a.created_date).getTime() : 0;
+                    const db = b.created_date ? new Date(b.created_date).getTime() : 0;
+                    return db - da;
+                });
+                sorted.forEach(msg => {
                     const id = `coach_${msg.id}`;
                     if (!notificationIds.has(id)) {
                         fetchedNotifications.push({
-                            id, 
-                            type: 'coach_message', 
-                            title: 'הודעה מהמאמן', 
-                            details: msg.message_text, 
-                            date: msg.created_date,
-                            icon: 'MessageSquare', 
-                            bgColor: 'bg-blue-100', 
-                            iconColor: 'text-blue-600', 
+                            id,
+                            type: 'coach_message',
+                            title: 'הודעה מהמאמן',
+                            details: msg.message_text,
+                            date: msg.created_date || msg.id,
+                            icon: 'MessageSquare',
+                            bgColor: 'bg-blue-100',
+                            iconColor: 'text-blue-600',
                             data: msg
                         });
                         notificationIds.add(id);
@@ -167,27 +173,26 @@ export default function UpdatesCenter() {
 
             // Process Admin Messages
             if (adminMessagesResult.status === 'fulfilled' && Array.isArray(adminMessagesResult.value)) {
+                const userGroups = Array.isArray(user.group_names) ? user.group_names : (user.group_names ? [user.group_names] : []);
+                const userEmailNormalized = (user.email || '').trim().toLowerCase();
                 adminMessagesResult.value.forEach(msg => {
-                    // Check if this message is relevant for current user
                     let isRelevant = false;
-                    
                     if (msg.target_type === 'all_users') {
                         isRelevant = true;
-                    } else if (msg.target_type === 'specific_group' && msg.target_group && user.group_names?.includes(msg.target_group)) {
+                    } else if (msg.target_type === 'specific_group' && msg.target_group && userGroups.includes(msg.target_group)) {
                         isRelevant = true;
-                    } else if (msg.target_type === 'specific_user' && msg.target_user_email === user.email) {
+                    } else if (msg.target_type === 'specific_user' && (msg.target_user_email || '').trim().toLowerCase() === userEmailNormalized) {
                         isRelevant = true;
                     }
 
                     if (isRelevant) {
-                        // Check if user has read this message
-                        const hasRead = msg.read_receipts?.some(r => r.user_email === user.email && r.is_read);
-                        
+                        const receipts = msg.read_receipts || [];
+                        const hasRead = receipts.some(r => (r.user_email || '').trim().toLowerCase() === userEmailNormalized && r.is_read === true);
                         if (!hasRead) {
                             const id = `admin_${msg.id}`;
                             if (!notificationIds.has(id)) {
                                 fetchedNotifications.push({
-                                    id, type: 'admin_message', title: msg.message_title, details: msg.message_content, date: msg.sent_date,
+                                    id, type: 'admin_message', title: msg.message_title || 'הודעה מהמנהל', details: msg.message_content || '', date: msg.sent_date,
                                     icon: 'MessageSquare', bgColor: 'bg-red-100', iconColor: 'text-red-600', data: msg
                                 });
                                 notificationIds.add(id);

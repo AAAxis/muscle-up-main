@@ -246,7 +246,7 @@ function TraineeDetailScreen({ trainee, onBack, onImageUpdated }) {
 // ══════════════════════════════════════════
 // ── Group Edit Screen ──
 // ══════════════════════════════════════════
-function GroupEditScreen({ group, trainer, allUsers, isSystemAdmin, onBack, onRefresh, onMessage, onError }) {
+function GroupEditScreen({ group, trainer, allUsers, isSystemAdmin, onBack, onRefresh, onEditUser, onMessage, onError }) {
   const isNew = !group;
   const [formData, setFormData] = useState({
     name: group?.name || '',
@@ -513,16 +513,30 @@ function GroupEditScreen({ group, trainer, allUsers, isSystemAdmin, onBack, onRe
                         <p className="text-xs text-slate-500">{user.email}</p>
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-red-600 border-red-200 hover:bg-red-50"
-                      onClick={() => handleRemoveUserFromGroup(user)}
-                      disabled={removingUserId === (user.id || user.uid)}
-                    >
-                      {removingUserId === (user.id || user.uid) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserMinus className="w-3.5 h-3.5 ms-1" />}
-                      הסר
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {onEditUser && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="text-slate-700 border-slate-300 hover:bg-slate-50"
+                          onClick={(e) => { e.stopPropagation(); onEditUser(user); }}
+                        >
+                          <Edit className="w-3.5 h-3.5 ms-1" />
+                          ערוך
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => handleRemoveUserFromGroup(user)}
+                        disabled={removingUserId === (user.id || user.uid)}
+                      >
+                        {removingUserId === (user.id || user.uid) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserMinus className="w-3.5 h-3.5 ms-1" />}
+                        הסר
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -571,10 +585,24 @@ function GroupEditScreen({ group, trainer, allUsers, isSystemAdmin, onBack, onRe
                           )}
                         </div>
                       </div>
-                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => handleAddUserToGroup(user)} disabled={isAssigningToGroup}>
-                        {isAssigningToGroup ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-3.5 h-3.5 ms-1" />}
-                        שייך
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {onEditUser && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="text-slate-700 border-slate-300 hover:bg-slate-50"
+                            onClick={(e) => { e.stopPropagation(); onEditUser(user); }}
+                          >
+                            <Edit className="w-3.5 h-3.5 ms-1" />
+                            ערוך
+                          </Button>
+                        )}
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => handleAddUserToGroup(user)} disabled={isAssigningToGroup}>
+                          {isAssigningToGroup ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-3.5 h-3.5 ms-1" />}
+                          שייך
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -590,7 +618,7 @@ function GroupEditScreen({ group, trainer, allUsers, isSystemAdmin, onBack, onRe
 // ══════════════════════════════════════════
 // ── Trainer Detail Screen ──
 // ══════════════════════════════════════════
-function TrainerDetailScreen({ trainer, allUsers, isSystemAdmin, onBack, onEditTrainer, onRemoveTrainer, onRefresh, onMessage, onError, onImageUpdated }) {
+function TrainerDetailScreen({ trainer, allUsers, isSystemAdmin, onBack, onEditTrainer, onEditUser, onRemoveTrainer, onRefresh, onMessage, onError, onImageUpdated }) {
   const [selectedGroup, setSelectedGroup] = useState(null);   // null = no group screen, 'new' = create, or group object = edit
   const [groups, setGroups] = useState([]);
   const [inviteLinkCopiedGroupName, setInviteLinkCopiedGroupName] = useState(null);
@@ -687,6 +715,7 @@ function TrainerDetailScreen({ trainer, allUsers, isSystemAdmin, onBack, onEditT
         isSystemAdmin={isSystemAdmin}
         onBack={() => { setSelectedGroup(null); reloadGroups(); }}
         onRefresh={() => { reloadGroups(); if (onRefresh) onRefresh(); }}
+        onEditUser={onEditUser}
         onMessage={onMessage}
         onError={onError}
       />
@@ -725,11 +754,8 @@ function TrainerDetailScreen({ trainer, allUsers, isSystemAdmin, onBack, onEditT
             </div>
             {isSystemAdmin && (
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => onEditTrainer(trainer)}>
+                <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); onEditTrainer(trainer); }}>
                   <Edit className="w-4 h-4 ms-2" />ערוך
-                </Button>
-                <Button variant="outline" size="sm" className="text-red-600 border-red-300 hover:bg-red-50" onClick={() => onRemoveTrainer(trainer)}>
-                  <UserMinus className="w-4 h-4 ms-2" />הסר תפקיד
                 </Button>
               </div>
             )}
@@ -868,6 +894,11 @@ export default function TrainerManagement({ onNavigateToTab }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [editingTrainer, setEditingTrainer] = useState(null);
+  const [editingTrainee, setEditingTrainee] = useState(null);
+  const [editTraineeName, setEditTraineeName] = useState('');
+  const [isSavingTraineeEdit, setIsSavingTraineeEdit] = useState(false);
+  const [isUploadingTraineePhoto, setIsUploadingTraineePhoto] = useState(false);
+  const traineePhotoInputRef = useRef(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -1111,7 +1142,60 @@ export default function TrainerManagement({ onNavigateToTab }) {
     if (selectedTrainer && (selectedTrainer.uid || selectedTrainer.id) === uid) {
       setSelectedTrainer(prev => prev ? { ...prev, profile_image_url: newUrl } : null);
     }
-  }, [selectedTrainer]);
+    if (editingTrainee && (editingTrainee.uid || editingTrainee.id) === uid) {
+      setEditingTrainee(prev => prev ? { ...prev, profile_image_url: newUrl } : null);
+    }
+  }, [selectedTrainer, editingTrainee]);
+
+  const openEditTrainee = useCallback((user) => {
+    setEditingTrainee({ ...user });
+    setEditTraineeName(user.name || user.full_name || '');
+    setMessage('');
+    setError('');
+  }, []);
+
+  const handleSaveTraineeEdit = useCallback(async () => {
+    if (!editingTrainee) return;
+    const uid = editingTrainee.uid || editingTrainee.id;
+    if (!uid) return;
+    setIsSavingTraineeEdit(true);
+    setError('');
+    try {
+      await User.update(uid, { name: editTraineeName.trim() || undefined, full_name: editTraineeName.trim() || undefined });
+      setAllUsers(prev => prev.map(u => (u.uid || u.id) === uid ? { ...u, name: editTraineeName.trim(), full_name: editTraineeName.trim() } : u));
+      setEditingTrainee(prev => prev ? { ...prev, name: editTraineeName.trim(), full_name: editTraineeName.trim() } : null);
+      setMessage('פרטי המתאמן עודכנו');
+      setTimeout(() => setEditingTrainee(null), 300);
+    } catch (err) {
+      console.error('Failed to update trainee:', err);
+      setError('שגיאה בעדכון פרטי המתאמן');
+    } finally {
+      setIsSavingTraineeEdit(false);
+    }
+  }, [editingTrainee, editTraineeName]);
+
+  const handleTraineePhotoUpload = useCallback(async (e) => {
+    const file = e?.target?.files?.[0];
+    if (!file || !editingTrainee) return;
+    if (!file.type.startsWith('image/')) return;
+    const uid = editingTrainee.uid || editingTrainee.id;
+    if (!uid) return;
+    setIsUploadingTraineePhoto(true);
+    setError('');
+    try {
+      const { file_url } = await UploadFile({ file });
+      await User.update(uid, { profile_image_url: file_url });
+      setEditingTrainee(prev => prev ? { ...prev, profile_image_url: file_url } : null);
+      setAllUsers(prev => prev.map(u => (u.uid || u.id) === uid ? { ...u, profile_image_url: file_url } : u));
+      setMessage('תמונת הפרופיל עודכנה');
+    } catch (err) {
+      console.error('Error uploading trainee photo:', err);
+      setError('שגיאה בהעלאת התמונה');
+    } finally {
+      setIsUploadingTraineePhoto(false);
+      if (traineePhotoInputRef.current) traineePhotoInputRef.current.value = '';
+    }
+  }, [editingTrainee]);
 
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-[300px]"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>;
@@ -1129,6 +1213,7 @@ export default function TrainerManagement({ onNavigateToTab }) {
           isSystemAdmin={isSystemAdmin}
           onBack={() => setSelectedTrainer(null)}
           onEditTrainer={(t) => { setEditingTrainer({ ...t }); setMessage(''); setError(''); }}
+          onEditUser={openEditTrainee}
           onRemoveTrainer={(t) => setRemovingTrainer(t)}
           onRefresh={loadData}
           onMessage={setMessage}
@@ -1201,6 +1286,14 @@ export default function TrainerManagement({ onNavigateToTab }) {
             <DialogFooter className="gap-2 sm:flex-row-reverse">
               <Button onClick={handleSaveTrainer} disabled={isSaving}>{isSaving ? <Loader2 className="w-4 h-4 animate-spin ms-2" /> : <Save className="w-4 h-4 ms-2" />}שמור שינויים</Button>
               <Button variant="outline" onClick={() => setEditingTrainer(null)}>ביטול</Button>
+              <Button
+                variant="destructive"
+                onClick={() => { if (editingTrainer) { setRemovingTrainer(editingTrainer); setEditingTrainer(null); } }}
+                disabled={isSaving}
+              >
+                <UserMinus className="w-4 h-4 ms-2" />
+                הסר מתפקיד מאמן
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1215,6 +1308,62 @@ export default function TrainerManagement({ onNavigateToTab }) {
             <DialogFooter className="gap-2 sm:flex-row-reverse">
               <Button variant="destructive" onClick={handleRemoveTrainerRole}>הסר תפקיד מאמן</Button>
               <Button variant="outline" onClick={() => setRemovingTrainer(null)}>ביטול</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Trainee (edit user) Dialog - must be here so it works from GroupEditScreen */}
+        <Dialog open={!!editingTrainee} onOpenChange={(open) => !open && setEditingTrainee(null)}>
+          <DialogContent className="max-w-md" dir="rtl">
+            <DialogHeader className="text-right ps-8">
+              <DialogTitle className="flex items-center gap-2"><Edit className="w-5 h-5 text-blue-600" />עריכת מתאמן</DialogTitle>
+              <DialogDescription>עדכן שם ותמונת פרופיל</DialogDescription>
+            </DialogHeader>
+            {editingTrainee && (
+              <div className="space-y-4 py-2">
+                <div className="flex flex-col items-center gap-3">
+                  <Label className="text-sm font-medium text-slate-700">תמונת פרופיל</Label>
+                  <div className="relative">
+                    {editingTrainee.profile_image_url ? (
+                      <img src={editingTrainee.profile_image_url} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-slate-200" />
+                    ) : (
+                      <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center border-2 border-slate-200">
+                        <UserIcon className="w-10 h-10 text-slate-400" />
+                      </div>
+                    )}
+                    <input ref={traineePhotoInputRef} type="file" accept="image/*" className="hidden" onChange={handleTraineePhotoUpload} />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="absolute -bottom-1 -start-1 rounded-full w-8 h-8 border-slate-300 bg-white hover:bg-slate-50"
+                      onClick={() => traineePhotoInputRef.current?.click()}
+                      disabled={isUploadingTraineePhoto}
+                    >
+                      {isUploadingTraineePhoto ? <Loader2 className="w-4 h-4 animate-spin text-slate-600" /> : <Camera className="w-4 h-4 text-slate-600" />}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-slate-500">לחץ על המצלמה להחלפת תמונה</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-trainee-name-detail">שם</Label>
+                  <Input
+                    id="edit-trainee-name-detail"
+                    value={editTraineeName}
+                    onChange={(e) => setEditTraineeName(e.target.value)}
+                    placeholder="שם המתאמן"
+                    className="text-end"
+                  />
+                </div>
+                <p className="text-xs text-slate-500">{editingTrainee.email}</p>
+              </div>
+            )}
+            <DialogFooter className="gap-2 sm:flex-row-reverse">
+              <Button variant="outline" onClick={() => setEditingTrainee(null)} disabled={isSavingTraineeEdit}>ביטול</Button>
+              <Button onClick={handleSaveTraineeEdit} disabled={isSavingTraineeEdit}>
+                {isSavingTraineeEdit ? <Loader2 className="w-4 h-4 animate-spin ms-2" /> : <Save className="w-4 h-4 ms-2" />}
+                שמור שינויים
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1264,11 +1413,15 @@ export default function TrainerManagement({ onNavigateToTab }) {
               transition={{ delay: index * 0.05 }}
             >
               <Card
-                className="hover:shadow-md hover:border-emerald-200 transition-all cursor-pointer"
-                onClick={() => setSelectedTrainer(trainer)}
+                className="hover:shadow-md hover:border-emerald-200 transition-all"
               >
                 <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center gap-4">
+                    {/* Avatar + Info: clickable to open detail */}
+                    <div
+                      className="flex-1 flex items-center gap-4 min-w-0 cursor-pointer"
+                      onClick={() => setSelectedTrainer(trainer)}
+                    >
                     {/* Avatar */}
                     <AvatarWithUpload user={trainer} size="xl" onImageUpdated={handleImageUpdated} fallbackIcon={Shield} borderColor="border-emerald-200" bgColor="bg-emerald-100" iconColor="text-emerald-600" />
 
@@ -1297,8 +1450,29 @@ export default function TrainerManagement({ onNavigateToTab }) {
                       </div>
                     </div>
 
-                    {/* Arrow */}
-                    <ArrowRight className="w-5 h-5 text-slate-300 flex-shrink-0 rotate-180" />
+                    <ArrowRight className="w-5 h-5 text-slate-300 rotate-180 flex-shrink-0" />
+                    </div>
+
+                    {/* Actions: not part of card click */}
+                    <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {isSystemAdmin && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="text-slate-700 border-slate-300 hover:bg-slate-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingTrainer({ ...trainer });
+                            setMessage('');
+                            setError('');
+                          }}
+                        >
+                          <Edit className="w-3.5 h-3.5 ms-1" />
+                          ערוך
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1440,6 +1614,14 @@ export default function TrainerManagement({ onNavigateToTab }) {
           <DialogFooter className="gap-2 sm:flex-row-reverse">
             <Button onClick={handleSaveTrainer} disabled={isSaving}>{isSaving ? <Loader2 className="w-4 h-4 animate-spin ms-2" /> : <Save className="w-4 h-4 ms-2" />}שמור שינויים</Button>
             <Button variant="outline" onClick={() => setEditingTrainer(null)}>ביטול</Button>
+            <Button
+              variant="destructive"
+              onClick={() => { if (editingTrainer) { setRemovingTrainer(editingTrainer); setEditingTrainer(null); } }}
+              disabled={isSaving}
+            >
+              <UserMinus className="w-4 h-4 ms-2" />
+              הסר מתפקיד מאמן
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1454,6 +1636,62 @@ export default function TrainerManagement({ onNavigateToTab }) {
           <DialogFooter className="gap-2 sm:flex-row-reverse">
             <Button variant="destructive" onClick={handleRemoveTrainerRole}>הסר תפקיד מאמן</Button>
             <Button variant="outline" onClick={() => setRemovingTrainer(null)}>ביטול</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Trainee (group member) Dialog */}
+      <Dialog open={!!editingTrainee} onOpenChange={(open) => !open && setEditingTrainee(null)}>
+        <DialogContent className="max-w-md" dir="rtl">
+          <DialogHeader className="text-right ps-8">
+            <DialogTitle className="flex items-center gap-2"><Edit className="w-5 h-5 text-blue-600" />עריכת מתאמן</DialogTitle>
+            <DialogDescription>עדכן שם ותמונת פרופיל</DialogDescription>
+          </DialogHeader>
+          {editingTrainee && (
+            <div className="space-y-4 py-2">
+              <div className="flex flex-col items-center gap-3">
+                <Label className="text-sm font-medium text-slate-700">תמונת פרופיל</Label>
+                <div className="relative">
+                  {editingTrainee.profile_image_url ? (
+                    <img src={editingTrainee.profile_image_url} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-slate-200" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center border-2 border-slate-200">
+                      <UserIcon className="w-10 h-10 text-slate-400" />
+                    </div>
+                  )}
+                  <input ref={traineePhotoInputRef} type="file" accept="image/*" className="hidden" onChange={handleTraineePhotoUpload} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="absolute -bottom-1 -start-1 rounded-full w-8 h-8 border-slate-300 bg-white hover:bg-slate-50"
+                    onClick={() => traineePhotoInputRef.current?.click()}
+                    disabled={isUploadingTraineePhoto}
+                  >
+                    {isUploadingTraineePhoto ? <Loader2 className="w-4 h-4 animate-spin text-slate-600" /> : <Camera className="w-4 h-4 text-slate-600" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500">לחץ על המצלמה להחלפת תמונה</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-trainee-name">שם</Label>
+                <Input
+                  id="edit-trainee-name"
+                  value={editTraineeName}
+                  onChange={(e) => setEditTraineeName(e.target.value)}
+                  placeholder="שם המתאמן"
+                  className="text-end"
+                />
+              </div>
+              <p className="text-xs text-slate-500">{editingTrainee.email}</p>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:flex-row-reverse">
+            <Button variant="outline" onClick={() => setEditingTrainee(null)} disabled={isSavingTraineeEdit}>ביטול</Button>
+            <Button onClick={handleSaveTraineeEdit} disabled={isSavingTraineeEdit}>
+              {isSavingTraineeEdit ? <Loader2 className="w-4 h-4 animate-spin ms-2" /> : <Save className="w-4 h-4 ms-2" />}
+              שמור שינויים
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

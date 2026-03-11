@@ -5,8 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Loader2, ArrowRight, Scale, Activity, ClipboardList, MessageSquare, Share2, Cake, HeartPulse, Weight, Recycle, Ruler, Droplets, Zap, Target, PieChart, AlertTriangle, Dumbbell
+  Loader2, ArrowRight, Scale, Activity, ClipboardList, MessageSquare, Share2, Cake, HeartPulse, Weight, Recycle, Ruler, Droplets, Zap, Target, PieChart, AlertTriangle, Dumbbell, Edit, Save
 } from 'lucide-react';
 import { parseISO, subDays, isBefore, isWithinInterval, startOfToday } from 'date-fns';
 import { formatDate, getRelativeTime } from '@/components/utils/timeUtils';
@@ -109,6 +113,10 @@ export default function AdminUserDetail({ userEmailFromPath }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [editError, setEditError] = useState('');
 
   const userEmail = (userEmailFromPath != null && userEmailFromPath !== '')
     ? userEmailFromPath
@@ -197,6 +205,73 @@ export default function AdminUserDetail({ userEmailFromPath }) {
     setTimeout(() => setIsCopied(false), 2000);
   }, [details]);
 
+  const openEdit = useCallback(() => {
+    const d = details || user;
+    if (!d) return;
+    const heightCm = d.height != null && d.height !== '' ? (typeof d.height === 'number' ? d.height * 100 : parseFloat(d.height) * 100) : '';
+    setEditForm({
+      name: d.name || d.full_name || '',
+      full_name: d.full_name || d.name || '',
+      email: d.email || '',
+      status: d.status || 'active',
+      coach_name: d.coach_name || '',
+      coach_email: d.coach_email || '',
+      phone: d.phone || d.coach_phone || '',
+      group_names: Array.isArray(d.group_names) ? d.group_names.join(', ') : (d.group_names || ''),
+      birth_date: d.birth_date ? (d.birth_date.split && d.birth_date.split('T')[0]) : '',
+      age: d.age != null && d.age !== '' ? String(d.age) : '',
+      height: heightCm !== '' ? String(heightCm) : '',
+      initial_weight: d.initial_weight != null && d.initial_weight !== '' ? String(d.initial_weight) : '',
+      weight: d.weight != null && d.weight !== '' ? String(d.weight) : (d.current_weight != null && d.current_weight !== '' ? String(d.current_weight) : ''),
+      bmi: d.bmi != null && d.bmi !== '' ? String(d.bmi) : '',
+    });
+    setEditError('');
+    setIsEditOpen(true);
+  }, [details, user]);
+
+  const handleSaveEdit = useCallback(async () => {
+    const uid = user?.uid || user?.id;
+    if (!uid) return;
+    setIsSaving(true);
+    setEditError('');
+    try {
+      const groupNamesStr = (editForm.group_names || '').trim();
+      const group_names = groupNamesStr ? groupNamesStr.split(',').map((s) => s.trim()).filter(Boolean) : [];
+      const heightVal = editForm.height !== '' && !isNaN(parseFloat(editForm.height)) ? parseFloat(editForm.height) / 100 : undefined;
+      const num = (v) => (v !== '' && v != null && !isNaN(parseFloat(v)) ? parseFloat(v) : undefined);
+      const payload = {
+        name: (editForm.name || '').trim() || undefined,
+        full_name: (editForm.full_name || '').trim() || undefined,
+        email: (editForm.email || '').trim() || undefined,
+        status: editForm.status || undefined,
+        coach_name: (editForm.coach_name || '').trim() || undefined,
+        coach_email: (editForm.coach_email || '').trim() || undefined,
+        phone: (editForm.phone || '').trim() || undefined,
+        group_names: group_names.length ? group_names : undefined,
+        birth_date: (editForm.birth_date || '').trim() || undefined,
+        age: num(editForm.age),
+        height: heightVal,
+        initial_weight: num(editForm.initial_weight),
+        weight: num(editForm.weight),
+        current_weight: num(editForm.weight),
+        bmi: num(editForm.bmi),
+      };
+      const clean = {};
+      Object.keys(payload).forEach((k) => {
+        if (payload[k] !== undefined && payload[k] !== '') clean[k] = payload[k];
+      });
+      await User.update(uid, clean);
+      setUser((prev) => (prev ? { ...prev, ...clean } : null));
+      setDetails((prev) => (prev ? { ...prev, ...clean } : null));
+      setIsEditOpen(false);
+    } catch (err) {
+      console.error('Failed to update user:', err);
+      setEditError(err?.message || 'שגיאה בעדכון המשתמש');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [user, editForm]);
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4" dir="rtl">
@@ -225,10 +300,16 @@ export default function AdminUserDetail({ userEmailFromPath }) {
   return (
     <div className="min-h-screen bg-slate-50 p-4" dir="rtl" style={{ textAlign: 'right' }}>
       <div className="max-w-4xl mx-auto space-y-4">
-        <Button variant="outline" onClick={() => navigate(listPath)} className="gap-2">
-          <ArrowRight className="w-4 h-4" />
-          חזרה לרשימת מתאמנים
-        </Button>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <Button variant="outline" onClick={() => navigate(listPath)} className="gap-2">
+            <ArrowRight className="w-4 h-4" />
+            חזרה לרשימת מתאמנים
+          </Button>
+          <Button variant="default" onClick={openEdit} className="gap-2">
+            <Edit className="w-4 h-4" />
+            ערוך
+          </Button>
+        </div>
         <h1 className="text-2xl font-bold text-slate-800">פרטי מתאמן: {details?.name || user.name}</h1>
 
         <ScrollArea className="h-[calc(100vh-180px)]">
@@ -379,6 +460,96 @@ export default function AdminUserDetail({ userEmailFromPath }) {
           </div>
         </ScrollArea>
       </div>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>עריכת מתאמן</DialogTitle>
+            <DialogDescription>עדכן פרטים ושמור. הרשאות נאכפות בשרת.</DialogDescription>
+          </DialogHeader>
+          {editError && <p className="text-sm text-red-600">{editError}</p>}
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>שם</Label>
+                <Input value={editForm.name ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} placeholder="שם" />
+              </div>
+              <div>
+                <Label>שם מלא</Label>
+                <Input value={editForm.full_name ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, full_name: e.target.value }))} placeholder="שם מלא" />
+              </div>
+            </div>
+            <div>
+              <Label>אימייל</Label>
+              <Input type="email" value={editForm.email ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder="אימייל" />
+            </div>
+            <div>
+              <Label>סטטוס</Label>
+              <Select value={editForm.status ?? 'active'} onValueChange={(v) => setEditForm((f) => ({ ...f, status: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">פעיל</SelectItem>
+                  <SelectItem value="inactive">לא פעיל</SelectItem>
+                  <SelectItem value="paused">מושהה</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>שם מאמן</Label>
+                <Input value={editForm.coach_name ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, coach_name: e.target.value }))} placeholder="מאמן" />
+              </div>
+              <div>
+                <Label>אימייל מאמן</Label>
+                <Input type="email" value={editForm.coach_email ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, coach_email: e.target.value }))} placeholder="אימייל מאמן" />
+              </div>
+            </div>
+            <div>
+              <Label>טלפון</Label>
+              <Input value={editForm.phone ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} placeholder="טלפון" />
+            </div>
+            <div>
+              <Label>קבוצות (מופרדות בפסיק)</Label>
+              <Input value={editForm.group_names ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, group_names: e.target.value }))} placeholder="קבוצה 1, קבוצה 2" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>תאריך לידה</Label>
+                <Input type="date" value={editForm.birth_date ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, birth_date: e.target.value }))} />
+              </div>
+              <div>
+                <Label>גיל</Label>
+                <Input type="number" min={1} max={120} value={editForm.age ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, age: e.target.value }))} placeholder="גיל" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label>גובה (ס״מ)</Label>
+                <Input type="number" min={1} value={editForm.height ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, height: e.target.value }))} placeholder="ס״מ" />
+              </div>
+              <div>
+                <Label>משקל התחלתי</Label>
+                <Input type="number" step="0.1" value={editForm.initial_weight ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, initial_weight: e.target.value }))} placeholder="ק״ג" />
+              </div>
+              <div>
+                <Label>משקל נוכחי</Label>
+                <Input type="number" step="0.1" value={editForm.weight ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, weight: e.target.value }))} placeholder="ק״ג" />
+              </div>
+            </div>
+            <div>
+              <Label>BMI</Label>
+              <Input type="number" step="0.1" value={editForm.bmi ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, bmi: e.target.value }))} placeholder="BMI" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditOpen(false)} disabled={isSaving}>ביטול</Button>
+            <Button onClick={handleSaveEdit} disabled={isSaving}>
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              שמור
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
