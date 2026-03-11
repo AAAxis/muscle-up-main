@@ -259,11 +259,12 @@ export default function ControlCenter({ onNavigateToTab }) {
 
             await AdminMessage.create(messageData);
 
-            // Send push notifications to mobile app for each recipient
+            // Send push notifications and emails to each recipient (like booster allow)
             const title = messageData.message_title || 'הודעה מהמנהל';
             const shortBody = (messageData.message_content || '').length > 80
                 ? messageData.message_content.slice(0, 77) + '...'
                 : (messageData.message_content || '');
+            const emailMessage = messageData.message_content || '';
             for (const receipt of readReceipts) {
                 const email = receipt.user_email;
                 if (!email) continue;
@@ -276,6 +277,23 @@ export default function ControlCenter({ onNavigateToTab }) {
                     });
                 } catch (fcmErr) {
                     console.warn('FCM push failed for', email, fcmErr);
+                }
+                try {
+                    const emailRes = await fetch('/api/send-group-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userEmail: email,
+                            title,
+                            message: emailMessage,
+                        }),
+                    });
+                    const emailData = await emailRes.json().catch(() => ({}));
+                    if (emailData.success !== true || (emailData.successCount === 0 && emailData.failureCount > 0)) {
+                        console.warn('Email failed for', email, emailData.error || emailData);
+                    }
+                } catch (emailErr) {
+                    console.warn('Email send failed for', email, emailErr);
                 }
             }
 

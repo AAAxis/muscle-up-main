@@ -389,15 +389,34 @@ export default function UserTrackingTab({ user, showUserHeader = true }) {
         is_read: false,
       });
 
+      const notificationTitle = 'משוב מהמאמן';
+      const notificationBody = feedbackMessage.trim().slice(0, 80) + (feedbackMessage.trim().length > 80 ? '...' : '');
       try {
         await SendFCMNotification({
           userEmail: user.email,
-          title: 'משוב מהמאמן',
-          body: feedbackMessage.trim().slice(0, 80) + (feedbackMessage.trim().length > 80 ? '...' : ''),
+          title: notificationTitle,
+          body: notificationBody,
           data: { type: 'coach_message', user_email: user.email },
         });
       } catch (fcmErr) {
         console.warn('FCM push failed for', user.email, fcmErr);
+      }
+      try {
+        const emailRes = await fetch('/api/send-group-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userEmail: user.email,
+            title: notificationTitle,
+            message: feedbackMessage.trim(),
+          }),
+        });
+        const emailData = await emailRes.json().catch(() => ({}));
+        if (emailData.success !== true || (emailData.successCount === 0 && emailData.failureCount > 0)) {
+          console.warn('Email failed for', user.email, emailData.error || emailData);
+        }
+      } catch (emailErr) {
+        console.warn('Email send failed for', user.email, emailErr);
       }
 
       toast({

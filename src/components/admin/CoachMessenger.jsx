@@ -110,18 +110,37 @@ export default function CoachMessenger() {
                 throw new Error('כל השליחות נכשלו');
             }
 
-            // Send push notifications to mobile app for each recipient
+            // Send push notifications and emails to each recipient (like booster allow)
             const shortText = messageText.trim().length > 80 ? messageText.trim().slice(0, 77) + '...' : messageText.trim();
+            const emailTitle = 'הודעה מהמאמן';
+            const emailMessage = messageText.trim();
             for (const email of targetEmails) {
                 try {
                     await SendFCMNotification({
                         userEmail: email,
-                        title: 'הודעה מהמאמן',
+                        title: emailTitle,
                         body: shortText,
                         data: { type: 'coach_message', user_email: email },
                     });
                 } catch (fcmErr) {
                     console.warn('FCM push failed for', email, fcmErr);
+                }
+                try {
+                    const emailRes = await fetch('/api/send-group-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userEmail: email,
+                            title: emailTitle,
+                            message: emailMessage,
+                        }),
+                    });
+                    const emailData = await emailRes.json().catch(() => ({}));
+                    if (emailData.success !== true || (emailData.successCount === 0 && emailData.failureCount > 0)) {
+                        console.warn('Email failed for', email, emailData.error || emailData);
+                    }
+                } catch (emailErr) {
+                    console.warn('Email send failed for', email, emailErr);
                 }
             }
 
